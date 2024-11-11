@@ -1,0 +1,63 @@
+<CaptureCameraScreen>
+
+    id: model_inference_screen
+    md_bg_color: app.colors.md_bg_color
+
+    MDBoxLayout:
+        orientation: 'vertical'
+
+        AppTopBar:
+            MDTopAppBarLeadingButtonContainer:
+                AppTopBarBtn:
+                    on_press: app.on_switch_tabs('','','', 'image_scr')
+
+            AppTopBarTitle:
+                text: "Capture Camera"
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: dp(430)
+
+            MDLabel:
+                text: "Captured Image"
+                halign: 'center'
+                size_hint: 1, None
+                height: dp(40)
+
+            SafeCamera:
+                id: safe_camera
+                size_hint: None, None
+                size: ["312dp", "312dp"]
+                pos_hint: {'center_x': .5}
+                canvas.after:
+                    Color:
+                        rgb: app.color_hex2rgb_flt(app.colors.background_neutral_default)
+                    Line:
+                        width: 2
+                        rectangle: self.x-2, self.y-2, self.width+2, self.height+2
+
+            MDBoxLayout:
+                orientation: 'vertical'
+                size_hint: 1, None
+                height: "70dp"
+
+                MDBoxLayout:
+                    size_hint: None, None
+                    width: self.minimum_width
+                    height: "50dp"
+                    pos_hint: {"center_x": 0.5}
+
+                    ThemedButton:
+                        on_release: app.capture_image(safe_camera.camera)
+                        ThemedBtnIcon:
+                            icon: 'camera-outline'
+                        ThemedBtnText:
+                            text: "Capture"
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: "120dp" # minimum height of buttons section in first screen
+
+        MDBoxLayout: # empty extended area, for longer screens
