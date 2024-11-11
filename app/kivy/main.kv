@@ -1,0 +1,87 @@
+#:import ImageUploadScreen screens.ImageUploadScreen
+#:import CaptureCameraScreen screens.CaptureCameraScreen
+#:import ModelInferenceScreen screens.ModelInferenceScreen
+#:import UserProfileScreen screens.UserProfileScreen
+
+<NavigationScreen>:
+    ImageUploadScreen:
+        id: image_scr
+        name: 'image_scr'
+    CaptureCameraScreen:
+        id: cam_scr
+        name: 'cam_scr'
+    ModelInferenceScreen:
+        id: model_scr
+        name: 'model_scr'
+    UserProfileScreen:
+        id: user_scr
+        name: 'user_scr'
+
+<NavigationBar>:
+    on_switch_tabs: app.on_switch_tabs(*args, True)
+    #TODO: Add a custom color scheme for the navigation bar
+    #FIXME: this way doesn't work
+    indication_color: app.colors.md_bg_color
+    indication_duration: 3
+
+    BaseMDNavigationItem:
+        id: image_scr
+        icon: "upload-outline" # "image-outline"
+        text: 'Image Upload'
+        active: True
+
+    BaseMDNavigationItem:
+        # icon: "assets/icons/machine-learning.png"
+        id: model_scr
+        icon: "robot-outline"
+        text: 'Model Inference'
+
+    BaseMDNavigationItem:
+        id: user_scr
+        icon: "account-outline"
+        text: 'User Profile'
+
+<BaseMDNavigationItem>
+    #FIXME: this way doesn't work
+    indication_color: app.colors.md_bg_color
+    indication_duration: 3
+    MDNavigationItemIcon:
+        icon: root.icon
+    MDNavigationItemLabel:
+        text: root.text
+
+<AppTopBar@MDTopAppBar>:
+    theme_bg_color: "Custom"
+    md_bg_color: app.colors.background_neutral_default
+    type: "small"
+
+<AppTopBarBtn@MDActionTopAppBarButton>:
+    theme_text_color: "Custom"
+    text_color: app.colors.font_surface_variant
+    icon: "arrow-left"
+
+<AppTopBarTitle@MDTopAppBarTitle>:
+    theme_text_color: "Custom"
+    text_color: app.colors.font_surface_variant
+
+<UploadedImageFrame@FitImage>:
+    canvas.before:
+        Color:
+            rgb: app.color_hex2rgb_flt(app.colors.md_bg_color)
+        Rectangle:
+            size: self.size
+            pos: self.pos
+    canvas.after:
+        Color:
+            rgb: app.color_hex2rgb_flt(app.colors.background_neutral_default)
+        Line:
+            width: 2
+            rectangle: self.x-2, self.y-2, self.width+2, self.height+2
+    size_hint: None, None
+    size: "312dp", "312dp"
+
+<SafeCamera>:
+
+<AutoCamera>:
+    resolution: (312, 312)
+    play: app.is_camera_open

@@ -1,0 +1,7 @@
+Kivy==2.3.0
+kivymd @ https://github.com/kivymd/KivyMD/archive/master.zip
+opencv_python==4.9.0.80
+opencv_python_headless==4.9.0.80
+Pillow==11.0.0
+numpy==1.26.4
+watchdog
