@@ -1,0 +1,34 @@
+<UserProfileScreen>
+
+    md_bg_color: app.colors.md_bg_color
+
+    MDBoxLayout:
+        orientation: 'vertical'
+
+        AppTopBar:
+            MDTopAppBarLeadingButtonContainer:
+                AppTopBarBtn:
+                    on_press: app.on_switch_tabs('','','', 'image_scr')
+
+            AppTopBarTitle:
+                text: "User Profile"
+
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: "50dp"
+
+            MDLabel:  # Placeholder for user profile picture
+                halign: 'left'
+                text: " *placeholder* Profile Picture"
+
+            MDLabel:  # Placeholder for user profile picture
+                halign: 'left'
+                text: " *placeholder* User's Detections History"
+
+        MDBoxLayout: # empty area equal to remaining layout height
+            size_hint: 1, None
+            height: "500dp" # minimum height of other screens
+
+        MDBoxLayout:  # empty extended area, for longer screens
