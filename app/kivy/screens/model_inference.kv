@@ -1,0 +1,37 @@
+<ModelInferenceScreen>
+
+    id: model_inference_screen
+    md_bg_color: app.colors.md_bg_color
+
+    MDBoxLayout:
+        orientation: 'vertical'
+
+        AppTopBar:
+            MDTopAppBarLeadingButtonContainer:
+                AppTopBarBtn:
+                    on_press: app.on_switch_tabs('','','', 'image_scr')
+
+            AppTopBarTitle:
+                text: "Model Inference"
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: dp(380)
+
+            MDLabel:
+                text: "Model Inference"
+                halign: 'center'
+                size_hint: 1, None
+                height: dp(40)
+
+            UploadedImageFrame:
+                pos_hint: {"center_x": 0.5, "top": 1}
+                source: app.out_file_path
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: "170dp" # minimum height of buttons section in first screen
+
+        MDBoxLayout: # empty extended area, for longer screens
