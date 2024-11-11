@@ -1,0 +1,88 @@
+<ImageUploadScreen>
+
+    id: image_upload_screen
+    md_bg_color: app.colors.md_bg_color
+
+    # all screens are "550dp" height, we want to maintain this height
+    # so it looks consistent through all devices
+
+    MDBoxLayout:
+        id: main_layout
+        orientation: 'vertical'
+
+        AppTopBar:
+            MDTopAppBarLeadingButtonContainer:
+            	AppTopBarBtn:
+                    icon: 'home-outline'
+
+            AppTopBarTitle:
+                text: "Image Upload"
+
+        MDBoxLayout:
+            id: image_frame
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: dp(380)
+
+            MDLabel:
+                text: "Uploaded Image"
+                halign: 'center'
+                size_hint: 1, None
+                height: dp(40)
+
+            UploadedImageFrame:
+                id: uploaded_image
+                pos_hint: {"center_x": 0.5, "top": 1}
+                source: app.file_path
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: "70dp"
+            MDBoxLayout:
+                size_hint: None, None
+                size: [self.minimum_width, self.minimum_height]
+                spacing: "50dp"
+                pos_hint: {"center_x": .5}
+                ThemedButton:
+                    on_release: app.upload_image(app)
+                    ThemedBtnIcon:
+                        icon: 'upload-outline'
+                    ThemedBtnText:
+                        text: "Upload"
+
+                ThemedButton:
+                    on_release: app.on_switch_tabs('', '', '', 'cam_scr')
+                    ThemedBtnIcon:
+                        icon: 'camera-outline'
+                    ThemedBtnText:
+                        text: "Capture"
+
+        MDBoxLayout:  # empty extended area, for longer screens
+
+        MDBoxLayout:
+            orientation: 'vertical'
+            size_hint: 1, None
+            height: "100dp"
+            MDBoxLayout:
+                size_hint: None, None
+                width: self.minimum_width
+                height: "70dp"
+                pos_hint: {"center_x": 0.5}
+
+                ThemedButton:
+                    pos_hint: {"center_x": 0.5, "top": 1.}
+                    on_release: app.detect_image(app.file_path)
+                    ThemedBtnIcon:
+                        icon: 'robot-outline'
+                    ThemedBtnText:
+                        text: "Detect Image"
+
+
+<ThemedButton@MDButton>:
+    theme_bg_color: "Custom"
+    md_bg_color: app.colors.background_neutral_default
+
+<ThemedBtnText@MDButtonText, ThemedBtnIcon@MDButtonIcon>:
+    theme_text_color: "Custom"
+    text_color: app.colors.font_surface_variant
