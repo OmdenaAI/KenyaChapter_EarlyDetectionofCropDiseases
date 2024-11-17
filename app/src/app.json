@@ -35,7 +35,29 @@
       [
         "react-native-vision-camera",
         {
-          "cameraPermissionText": "Crop Diseases Detection App needs access to your Camera."
+          "cameraPermissionText": "Allow Crop Diseases Detection App to access your Camera."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Crop Diseases Detection App to access your photos.",
+          "savePhotosPermission": "Allow Crop Diseases Detection App to save photos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share them with your friends."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Crop Diseases Detection App to access your camera",
+          "microphonePermission": "Allow Crop Diseases Detection App to access your microphone",
+          "recordAudioAndroid": true
         }
       ]
     ],
