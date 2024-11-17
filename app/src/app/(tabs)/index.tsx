@@ -4,10 +4,11 @@ import {
 	Image,
 	StyleSheet,
 	Pressable,
-	ToastAndroid,
 	FlatList,
 	ScrollView,
 } from "react-native";
+import Toast from "react-native-root-toast";
+
 import { useAppState } from "@react-native-community/hooks";
 import { useIsFocused } from "@react-navigation/core";
 import {
@@ -16,7 +17,6 @@ import {
 	useCameraPermission,
 } from "react-native-vision-camera";
 import { useTensorflowModel } from "react-native-fast-tflite";
-import { useSharedValue } from "react-native-reanimated";
 import * as ImagePicker from "react-native-image-picker";
 import * as MediaLibrary from "expo-media-library";
 
@@ -29,7 +29,6 @@ import CameraLiveFeed, {
 	PermissionsPage,
 } from "@/components/LiveCamera";
 import MODELS from "@/constants/Models";
-import { PredictionLabel } from "@/components/PredictionLabel";
 import {
 	detectionModelPostProcess,
 	fetch_labels,
@@ -50,14 +49,14 @@ const labels_uri = MODELS[model_idx].labels;
 const model_uri = MODELS[model_idx].model;
 
 export default function HomeScreen() {
-	let currentLabel = useSharedValue("");
+	const [predictionLabel, setCurrentLabel] = useState("");
 	const model = useTensorflowModel(model_uri);
 	const actual_model = model.state === "loaded" ? model.model : undefined;
 
-	const labels_map = useSharedValue<string[] | null>(null);
-	if (!labels_map.value)
+	const [labels_map, setLabels_map] = useState<string[] | null>(null);
+	if (!labels_map)
 		fetch_labels(labels_uri)
-			.then((data: string) => (labels_map.value = data.split("\n")))
+			.then((data: string) => setLabels_map(data.split("\n")))
 			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
 
 	const isFocused = useIsFocused();
@@ -87,6 +86,34 @@ export default function HomeScreen() {
 	const [prevImageUri, setPrevImageUri] = useState<any>(null);
 	const [imageUri, setImageUri] = useState<any>(null);
 	const [imageContent, setImageContent] = useState<any>(null);
+	const [imgInput, setImgInput] = useState<any>(null);
+	const [enableDetection, setEnableDetection] = useState(false);
+
+	const [imageSavedToastShow, setImageSavedToastShow] = useState(false);
+	const imageSavedToast = (
+		<Toast
+			visible={imageSavedToastShow}
+			position={Toast.positions.BOTTOM}
+			shadow={true}
+			animation={true}
+			hideOnPress={true}
+		>
+			Image saved to gallery!
+		</Toast>
+	);
+
+	const [detectionsToastShow, setDetectionsToastShow] = useState(false);
+	let detectionsToast = (
+		<Toast
+			visible={detectionsToastShow}
+			position={Toast.positions.BOTTOM}
+			shadow={true}
+			animation={true}
+			hideOnPress={true}
+		>
+			Running Detection ...
+		</Toast>
+	);
 
 	useEffect(() => {
 		let skip = false;
@@ -108,16 +135,20 @@ export default function HomeScreen() {
 					return imageUri;
 			  })()
 			: // otherwise, load default image
-			  (() => require("@/assets/images/robot-outline.512.png"))();
+			  (() => {
+					setImgInput(null);
+					return require("@/assets/images/robot-outline.512.png");
+			  })();
 
 		if (skip) {
 			console.log(`[MyInfoLog-updatePreview] there's no new image to be set`);
 			return;
 		}
 
-		get_img_model_input(newImageUri.uri)
-			.then((img) => setImgInput(img))
-			.catch((e) => console.log(`[MyErrLog-modelInput] ${e}`));
+		if (newImageUri?.uri)
+			get_img_model_input(newImageUri.uri)
+				.then((img) => setImgInput(img))
+				.catch((e) => console.log(`[MyErrLog-modelInput] ${e}`));
 
 		setImageContent(
 			<Image
@@ -126,29 +157,48 @@ export default function HomeScreen() {
 			/>
 		);
 
+    setImageSavedToastShow(false);
 		if (!imageUri?.camUri) setPrevImageUri(imageUri);
 		setImageUri(newImageUri);
 	}, [updatedImageUri]);
 
-	const [imgInput, setImgInput] = useState<any>(null);
+	const runDetection = () => {
+		const detect = () => {
+			if (!labels_map || !actual_model || !imgInput) return;
+
+			const model_results = actual_model?.runSync([imgInput]);
+			if (!model_results) {
+				console.log("[MyErrLog-inference] No inference results");
+				return;
+			}
+
+			const inference_results = detectionModelPostProcess(model_results);
+			if (!inference_results.length) {
+				console.log("[MyErrLog-detections] There're no detections");
+				return;
+			}
+			return labels_map[inference_results[0].classIdx].trim();
+		};
+
+		let retries = 0;
+		const tryDetection = () => {
+			++retries;
+			let detectionResult = detect();
+			console.log(`[MyWarnLog-detection] Detection failed, Retry #${retries}`);
+			if (!detectionResult && retries < 3) setTimeout(tryDetection, 1000);
+			else {
+				setDetectionsToastShow(false);
+				setCurrentLabel(detectionResult || "Detection failed!");
+			}
+		};
+
+		setDetectionsToastShow(true);
+		// TODO: figure out how to move this function calling to another thread
+		setTimeout(tryDetection, 1);
+	};
+
 	useEffect(() => {
-		if (labels_map.value == null) return;
-		if (actual_model == null) return;
-		if (imgInput == null) return;
-
-		const model_results = actual_model?.runSync([imgInput]);
-		if (!model_results) {
-			console.log("[MyErrLog-inference] No inference results");
-			return;
-		}
-
-		const inference_results = detectionModelPostProcess(model_results);
-		if (!inference_results.length) {
-			console.log("[MyErrLog-detections] There're no detections");
-			return;
-		}
-
-		currentLabel.value = labels_map.value[inference_results[0].classIdx].trim();
+		setEnableDetection(labels_map && actual_model && imgInput);
 	}, [actual_model, labels_map, imgInput]);
 
 	const camera = useRef<Camera>(null);
@@ -197,7 +247,7 @@ export default function HomeScreen() {
 			onPress={() => {
 				toggleCamera();
 				let imgUri = imageUri;
-				delete imgUri.camUri;
+				if (imgUri?.camUri) delete imgUri.camUri;
 				setUpdatedImageUri({ ...imgUri });
 			}}
 		>
@@ -213,8 +263,8 @@ export default function HomeScreen() {
 			onPress={async () => {
 				MediaLibrary.createAssetAsync(imageUri?.uri)
 					.then((data) => {
-						ToastAndroid.show("image saved to gallery!", ToastAndroid.SHORT);
-						setUpdatedImageUri(data);
+						setImageSavedToastShow(true);
+						setTimeout(setUpdatedImageUri, 1, data);
 					})
 					.catch((e) => {
 						console.log(`[MyErrLog-saveCapture] ${JSON.stringify(e)}\n${e}`);
@@ -229,7 +279,7 @@ export default function HomeScreen() {
 			style={styles.imageButtons}
 			onPress={() => {
 				let imgUri = prevImageUri;
-				delete imgUri.camUri;
+				if (imgUri?.camUri) delete imgUri.camUri;
 				setUpdatedImageUri({ ...imgUri });
 			}}
 		>
@@ -245,7 +295,11 @@ export default function HomeScreen() {
 				marginVertical: 20,
 			}}
 		>
-			<Pressable style={styles.imageButtons} onPress={() => {}}>
+			<Pressable
+				style={styles.imageButtons}
+				onPress={runDetection}
+				disabled={!enableDetection}
+			>
 				<ThemedText style={styles.imageButtonsText}>Check Crop</ThemedText>
 			</Pressable>
 		</View>
@@ -256,8 +310,12 @@ export default function HomeScreen() {
 		<ParallaxThemedView childrenStyle={styles.content}>
 			<ThemedText type="title">Results</ThemedText>
 			<ParallaxScrollView childrenStyle={styles.innerContent}>
-				<ThemedText>Type:</ThemedText>
-				<PredictionLabel sharedValue={currentLabel} />
+				<ThemedText>
+					Type:&emsp;
+					<ThemedText style={styles.detectionLabelText}>
+						{predictionLabel.toUpperCase()}
+					</ThemedText>
+				</ThemedText>
 				<Collapsible title="Crop disease prediction details" defaultOpen={true}>
 					<ThemedText>Here goes a list of details if there're any.</ThemedText>
 					<ThemedText>This list contains coco dataset classes:</ThemedText>
@@ -269,7 +327,7 @@ export default function HomeScreen() {
 									{index} - {item}
 								</ThemedText>
 							)}
-							data={labels_map.value}
+							data={labels_map}
 						></FlatList>
 					</ScrollView>
 				</Collapsible>
@@ -295,9 +353,11 @@ export default function HomeScreen() {
 						{imageUri?.camUri ? saveCaptureBtn : toggleCameraBtn}
 					</View>
 				)}
+				{imageSavedToast}
 			</View>
+			{detectionsToast}
 			{detectionOutputs}
-			{imgInput ? detectionBtn : <View></View>}
+			{enableDetection ? detectionBtn : <View></View>}
 		</View>
 	);
 }
@@ -373,5 +433,10 @@ const styles = StyleSheet.create({
 		flexDirection: "row",
 		alignItems: "center",
 		justifyContent: "center",
+	},
+	detectionLabelText: {
+		letterSpacing: 2,
+		fontSize: 20,
+		fontWeight: "700",
 	},
 });
