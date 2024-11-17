@@ -28,7 +28,6 @@ export const detectionModelPostProcess = (
 	let detections: ModelDetection[] = [];
 	let [boxes, classes, scores, num_detections] = inference_results;
 	num_detections = num_detections[0] ?? 0;
-	console.log("num_detections:", num_detections);
 
 	for (let i = 0, idx = 0; i < num_detections; i++, idx += 4) {
 		detections.push({
@@ -44,22 +43,19 @@ export const detectionModelPostProcess = (
 export const fetch_labels = async (labels_path: any) => {
 	const { localUri } = await Asset.fromModule(labels_path).downloadAsync();
 	if (!localUri) {
-		console.log("[MyErrLog-1] Loading labels failed");
+		console.log("[MyErrLog-labels] Loading labels failed");
 		return "";
 	}
 	return await readAsStringAsync(localUri);
 };
 
 export const get_img_model_input = async (img_input: any) => {
-	if (!img_input) return console.log("MyErrLog-6");
-	console.log(`get_img_model_input step 1: ${img_input}`);
+	if (!img_input) return console.log("[MyErrLog-imgInput]");
 	return Skia.Data.fromURI(img_input)
 		.then((imageData) => {
-			console.log(`get_img_model_input step 2: ${JSON.stringify(imageData)}`);
 			const image = Skia.Image.MakeImageFromEncoded(imageData);
-			if (!image) return console.log("MyErrLog-5");
-			console.log(`img loading done, image[0] = ${image.readPixels()?.[0]}`);
+			if (!image) return console.log("[MyErrLog-skiaImage]");
 			return image.readPixels();
 		})
-		.catch((e) => console.log(`MyErrLog-4 ${e}`));
+		.catch((e) => console.log(`[MyErrLog-skiaModelInput] ${e}`));
 };

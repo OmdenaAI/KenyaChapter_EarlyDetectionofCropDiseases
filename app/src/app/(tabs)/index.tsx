@@ -49,8 +49,6 @@ const model_idx = 1;
 const labels_uri = MODELS[model_idx].labels;
 const model_uri = MODELS[model_idx].model;
 
-// TODO: remove `console.log` statements, and review commented blocks
-
 export default function HomeScreen() {
 	let currentLabel = useSharedValue("");
 	const model = useTensorflowModel(model_uri);
@@ -60,7 +58,7 @@ export default function HomeScreen() {
 	if (!labels_map.value)
 		fetch_labels(labels_uri)
 			.then((data: string) => (labels_map.value = data.split("\n")))
-			.catch((e) => console.log("[MyErrLog-2] " + e));
+			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
 
 	const isFocused = useIsFocused();
 	const appState = useAppState();
@@ -81,8 +79,6 @@ export default function HomeScreen() {
 		setUseCamera(true);
 	};
 
-	const [enableDetection, setEnableDetection] = useState(false);
-
 	// TODO: refactor this block (maybe with more meaningful variable names)
 	const [updatedImageUri, setUpdatedImageUri] = useState<any>(null);
 	const openImagePicker = (options: ImagePicker.ImageLibraryOptions) => {
@@ -93,12 +89,6 @@ export default function HomeScreen() {
 	const [imageContent, setImageContent] = useState<any>(null);
 
 	useEffect(() => {
-		console.log(
-			`old prevImageUri before setting ${JSON.stringify(prevImageUri)}`
-		);
-		console.log(`old imageUri before setting ${JSON.stringify(imageUri)}`);
-		console.log(`new image to be set ${JSON.stringify(updatedImageUri)}`);
-
 		let skip = false;
 		const newImageUri = updatedImageUri?.assets // source is image picker
 			? { localUri: true, uri: updatedImageUri?.assets[0].uri }
@@ -121,18 +111,13 @@ export default function HomeScreen() {
 			  (() => require("@/assets/images/robot-outline.512.png"))();
 
 		if (skip) {
-			console.log(`there's no new image to be set`);
+			console.log(`[MyInfoLog-updatePreview] there's no new image to be set`);
 			return;
 		}
 
-		console.log(`the new imageUri has been set ${JSON.stringify(newImageUri)}`);
-
 		get_img_model_input(newImageUri.uri)
-			.then((img) => {
-				console.log(`the new model input img has been set`);
-				setImgInput(img);
-			})
-			.catch((e) => console.log(`[MyErrLog-3] ${e}`));
+			.then((img) => setImgInput(img))
+			.catch((e) => console.log(`[MyErrLog-modelInput] ${e}`));
 
 		setImageContent(
 			<Image
@@ -153,54 +138,24 @@ export default function HomeScreen() {
 
 		const model_results = actual_model?.runSync([imgInput]);
 		if (!model_results) {
-			console.log("No inference results");
+			console.log("[MyErrLog-inference] No inference results");
 			return;
 		}
 
-		// console.log(`model results have been set ${JSON.stringify(model_results)}`);
 		const inference_results = detectionModelPostProcess(model_results);
 		if (!inference_results.length) {
-			console.log("zero detections");
+			console.log("[MyErrLog-detections] There're no detections");
 			return;
 		}
 
-		console.log(`[MyDbgLog] labels ${JSON.stringify(labels_map.value?.[0])}`);
-		console.log(`[MyDbgLog] model ${JSON.stringify(actual_model)}`);
-		console.log(`[MyDbgLog] img input ${JSON.stringify(imgInput?.[0])}`);
-
-		// console.log(`Model loaded -- ${modelToString(actual_model)}]`);
-		// console.log(`labels have been set with count = ${labels_map.value.length}`);
-
-		// const result = resize(img_input, {
-		// 	scale: {
-		// 		// width: HEIGHT,
-		// 		// height: WIDTH,
-		// 		width: WIDTH,
-		// 		height: HEIGHT,
-		// 	},
-		// 	dataType: TARGET_TYPE,
-		// 	pixelFormat: TARGET_FORMAT,
-		// 	rotation: "90deg",
-		// });
-
-		// console.log(`inference results have been set ${JSON.stringify(inference_results)}`);
 		currentLabel.value = labels_map.value[inference_results[0].classIdx].trim();
-		console.log(`output label is ${currentLabel.value}`);
-
-		return () => {
-			// clean local variables
-			model_results;
-			inference_results;
-		};
 	}, [actual_model, labels_map, imgInput]);
 
 	const camera = useRef<Camera>(null);
 	const previewCameraCapture = () => {
-		console.log("capturing ...");
 		camera.current
 			?.takeSnapshot()
 			.then((img) => {
-				console.log(`capture img path: ${img.path}`);
 				setUpdatedImageUri(img);
 				toggleCamera();
 				return img;
@@ -258,13 +213,11 @@ export default function HomeScreen() {
 			onPress={async () => {
 				MediaLibrary.createAssetAsync(imageUri?.uri)
 					.then((data) => {
-						console.log(`image saved to gallery: ${JSON.stringify(data)}`);
 						ToastAndroid.show("image saved to gallery!", ToastAndroid.SHORT);
 						setUpdatedImageUri(data);
 					})
 					.catch((e) => {
-						console.log(`[MyErrLog] ${JSON.stringify(e)}`);
-						console.log(`[MyErrLog] ${e}`);
+						console.log(`[MyErrLog-saveCapture] ${JSON.stringify(e)}\n${e}`);
 					});
 			}}
 		>
@@ -277,9 +230,6 @@ export default function HomeScreen() {
 			onPress={() => {
 				let imgUri = prevImageUri;
 				delete imgUri.camUri;
-				console.log(
-					`discarding, reverting back to ${JSON.stringify({ ...imgUri })}`
-				);
 				setUpdatedImageUri({ ...imgUri });
 			}}
 		>

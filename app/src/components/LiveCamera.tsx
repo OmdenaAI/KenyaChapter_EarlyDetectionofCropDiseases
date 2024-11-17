@@ -71,7 +71,7 @@ const CameraLiveFeed = ({
 				isActive={true}
 				photo={true}
 				format={cameraFormat}
-				fps={[2,2]}
+				fps={[2, 2]}
 				photoQualityBalance="speed"
 			/>
 			<Text style={{ color: "white" }}>CameraLiveFeed Detection</Text>
@@ -96,9 +96,5 @@ const styles = StyleSheet.create({
 		flex: 1,
 		justifyContent: "center",
 		alignItems: "center",
-		// position: "absolute",
-		// width: "100%",
-		// maxWidth: -1,
-		// maxHeight: -1,
 	},
 });
