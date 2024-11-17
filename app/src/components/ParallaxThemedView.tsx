@@ -15,7 +15,7 @@ export default function ParallaxThemedView({
 	children,
 	childrenStyle,
 	headerImage,
-	headerBackgroundColor,
+	headerBackgroundColor = { light: "#D0D0D0", dark: "#353636" },
 	headerStyle,
 }: Props) {
 	if (!childrenStyle) childrenStyle = styles.content;

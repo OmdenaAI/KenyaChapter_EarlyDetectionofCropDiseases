@@ -12,7 +12,6 @@ export default function TabTwoScreen() {
 	return (
 		<ParallaxThemedView
 			childrenStyle={styles.content}
-			headerBackgroundColor={{ light: "#D0D0D0", dark: "#353636" }}
 			headerImage={
 				<Ionicons size={310} name="code-slash" style={styles.headerImage} />
 			}
@@ -22,12 +21,9 @@ export default function TabTwoScreen() {
 				<ThemedText type="title">Explore</ThemedText>
 			</ThemedView>
 			<ThemedText>
-				This app includes example code to help you get started.
+				This app includes example code zto help you get started.
 			</ThemedText>
-			<ParallaxScrollView
-				headerBackgroundColor={{ light: "#D0D0D0", dark: "#353636" }}
-				childrenStyle={styles.innerContent}
-			>
+			<ParallaxScrollView childrenStyle={styles.innerContent}>
 				<Collapsible title="File-based routing">
 					<ThemedText>
 						This app has two screens:{" "}
