@@ -25,8 +25,8 @@ import ParallaxThemedView from "@/components/ParallaxThemedView";
 import ThemedText from "@/components/ThemedText";
 import Collapsible from "@/components/Collapsible";
 import CameraLiveFeed, {
+	CameraPermissionsPage,
 	NoCameraDeviceError,
-	PermissionsPage,
 } from "@/components/LiveCamera";
 import MODELS from "@/constants/Models";
 import {
@@ -48,8 +48,23 @@ const model_idx = 1;
 const labels_uri = MODELS[model_idx].labels;
 const model_uri = MODELS[model_idx].model;
 
+const showRetryDetectionToast = (retries: number) => {
+	let retries_txt = "";
+	if (retries < 0 || retries > 2) retries_txt = "invalid retry";
+	else retries_txt = ["1st try", "2nd try", "3rd try"][retries];
+
+	Toast.show(`Retry running detection ... ${retries_txt}`, {
+		visible: true,
+		position: Toast.positions.BOTTOM,
+		shadow: true,
+		animation: true,
+		delay: 500,
+		hideOnPress: true,
+	});
+};
+
 export default function HomeScreen() {
-	const [predictionLabel, setCurrentLabel] = useState("");
+	const [predictionLabel, setPredictionLabel] = useState("");
 	const model = useTensorflowModel(model_uri);
 	const actual_model = model.state === "loaded" ? model.model : undefined;
 
@@ -65,13 +80,15 @@ export default function HomeScreen() {
 	const cameraOpened = useCamera && isFocused && appState === "active";
 
 	const { hasPermission, requestPermission } = useCameraPermission();
+	const [showPermissionsRequestPage, setShowPermissionsRequestPage] =
+		useState(false);
+
 	const device = useCameraDevice("back");
 
 	const toggleCamera = () => {
 		if (useCamera) return setUseCamera(false);
 
-		if (!hasPermission)
-			return <PermissionsPage requestPermissionFn={requestPermission} />;
+		if (!hasPermission) setShowPermissionsRequestPage(true);
 
 		if (device == null) return <NoCameraDeviceError />;
 
@@ -117,28 +134,32 @@ export default function HomeScreen() {
 
 	useEffect(() => {
 		let skip = false;
-		const newImageUri = updatedImageUri?.assets // source is image picker
-			? { localUri: true, uri: updatedImageUri?.assets[0].uri }
-			: updatedImageUri?.path // source is camera
-			? { camUri: true, uri: `file://${updatedImageUri.path}` }
-			: // use latest uploaded image after discarding cam capture
-			updatedImageUri?.uri && !updatedImageUri?.camUri
-			? (() => {
-					const imgUri = { localUri: true, uri: updatedImageUri.uri };
-					setImageUri(imgUri);
-					return imgUri;
-			  })()
-			: // if all sources fail, check if current image is a valid then leave it as is
-			imageUri?.uri && !imageUri?.camUri
-			? (() => {
-					skip = true;
-					return imageUri;
-			  })()
-			: // otherwise, load default image
-			  (() => {
-					setImgInput(null);
-					return require("@/assets/images/robot-outline.512.png");
-			  })();
+		let newImageUri = null;
+		// source is image picker
+		if (updatedImageUri?.assets)
+			newImageUri = { localUri: true, uri: updatedImageUri?.assets[0].uri };
+		// source is camera
+		else if (updatedImageUri?.path)
+			newImageUri = { camUri: true, uri: `file://${updatedImageUri.path}` };
+		// use latest uploaded image after discarding cam capture
+		else if (updatedImageUri?.uri && !updatedImageUri?.camUri)
+			newImageUri = (() => {
+				const imgUri = { localUri: true, uri: updatedImageUri.uri };
+				setImageUri(imgUri);
+				return imgUri;
+			})();
+		// if all sources fail, check if current image is a valid then leave it as is
+		else if (imageUri?.uri && !imageUri?.camUri)
+			newImageUri = (() => {
+				skip = true;
+				return imageUri;
+			})();
+		// otherwise, load default image
+		else
+			newImageUri = (() => {
+				setImgInput(null);
+				return require("@/assets/images/robot-outline.512.png");
+			})();
 
 		if (skip) {
 			console.log(`[MyInfoLog-updatePreview] there's no new image to be set`);
@@ -157,7 +178,9 @@ export default function HomeScreen() {
 			/>
 		);
 
-    setImageSavedToastShow(false);
+		setDetectionsToastShow(false);
+		setPredictionLabel("");
+		setTimeout(setImageSavedToastShow, 500, false);
 		if (!imageUri?.camUri) setPrevImageUri(imageUri);
 		setImageUri(newImageUri);
 	}, [updatedImageUri]);
@@ -184,11 +207,16 @@ export default function HomeScreen() {
 		const tryDetection = () => {
 			++retries;
 			let detectionResult = detect();
-			console.log(`[MyWarnLog-detection] Detection failed, Retry #${retries}`);
-			if (!detectionResult && retries < 3) setTimeout(tryDetection, 1000);
-			else {
-				setDetectionsToastShow(false);
-				setCurrentLabel(detectionResult || "Detection failed!");
+
+			if (!detectionResult && retries < 3) {
+				console.log(
+					`[MyWarnLog-detection] Detection failed, Retry #${retries}`
+				);
+				showRetryDetectionToast(retries - 1);
+				setTimeout(tryDetection, 1000);
+			} else {
+				setTimeout(setDetectionsToastShow, 300, false);
+				setPredictionLabel(detectionResult ?? "Detection failed!");
 			}
 		};
 
@@ -228,7 +256,10 @@ export default function HomeScreen() {
 	const captureCameraBtn = (
 		<Pressable
 			style={styles.imageButtons}
-			onPress={() => previewCameraCapture()}
+			onPress={() => {
+				setShowPermissionsRequestPage(false);
+				previewCameraCapture();
+			}}
 		>
 			<ThemedText style={styles.imageButtonsText}>Capture</ThemedText>
 		</Pressable>
@@ -345,7 +376,13 @@ export default function HomeScreen() {
 					{cameraOpened ? cameraContent : imageContent}
 				</View>
 
-				{cameraOpened ? (
+				{showPermissionsRequestPage && !hasPermission ? (
+					<CameraPermissionsPage requestPermissionFn={requestPermission} />
+				) : (
+					<View></View>
+				)}
+
+				{cameraOpened && hasPermission ? (
 					captureCameraBtn
 				) : (
 					<View style={styles.imageButtonsContainer}>

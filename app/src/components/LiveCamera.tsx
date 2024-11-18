@@ -27,7 +27,7 @@ type RequestPermissionProps = {
 	requestPermissionFn: any;
 };
 
-export const PermissionsPage = ({
+export const CameraPermissionsPage = ({
 	requestPermissionFn,
 }: RequestPermissionProps) => {
 	requestPermissionFn();
@@ -51,16 +51,15 @@ const CameraLiveFeed = ({
 }: CameraProps) => {
 	const device = useCameraDevice("back");
 	const { hasPermission, requestPermission } = useCameraPermission();
-
-	if (!hasPermission)
-		return <PermissionsPage requestPermissionFn={requestPermission} />;
-	if (device == null) return <NoCameraDeviceError />;
-
 	const cameraFormat = useCameraFormat(device, [
-		{ photoAspectRatio: 1 / 1 },
+		{ photoAspectRatio: 1 },
 		{ photoResolution: { width: width, height: height } },
 		{ fps: 2 },
 	]);
+
+	if (!hasPermission)
+		return <CameraPermissionsPage requestPermissionFn={requestPermission} />;
+	if (device == null) return <NoCameraDeviceError />;
 
 	let cameraFeed = (
 		<View style={{ flex: 1 }}>
@@ -71,7 +70,6 @@ const CameraLiveFeed = ({
 				isActive={true}
 				photo={true}
 				format={cameraFormat}
-				fps={[2, 2]}
 				photoQualityBalance="speed"
 			/>
 			<Text style={{ color: "white" }}>CameraLiveFeed Detection</Text>
