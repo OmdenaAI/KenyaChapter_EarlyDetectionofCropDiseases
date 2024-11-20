@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
 	View,
 	Image,
@@ -6,40 +6,29 @@ import {
 	Pressable,
 	FlatList,
 	ScrollView,
+	Text,
 } from "react-native";
 import Toast from "react-native-root-toast";
 
 import { useAppState } from "@react-native-community/hooks";
 import { useIsFocused } from "@react-navigation/core";
-import {
-	Camera,
-	useCameraDevice,
-	useCameraPermission,
-} from "react-native-vision-camera";
+import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { useTensorflowModel } from "react-native-fast-tflite";
-import * as ImagePicker from "react-native-image-picker";
+import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 import ParallaxThemedView from "@/components/ParallaxThemedView";
 import ThemedText from "@/components/ThemedText";
 import Collapsible from "@/components/Collapsible";
-import CameraLiveFeed, {
-	CameraPermissionsPage,
-	NoCameraDeviceError,
-} from "@/components/LiveCamera";
 import MODELS from "@/constants/Models";
 import {
 	detectionModelPostProcess,
 	fetch_labels,
 	get_img_model_input,
 } from "@/components/Model";
-
-const uploadImageOptions: ImagePicker.ImageLibraryOptions = {
-	selectionLimit: 1,
-	mediaType: "photo",
-	includeBase64: false,
-};
+import { Ionicons } from "@expo/vector-icons";
+import { center } from "@shopify/react-native-skia";
 
 const CAMERA_WIDTH = 312;
 const CAMERA_HEIGHT = 312;
@@ -48,12 +37,26 @@ const model_idx = 1;
 const labels_uri = MODELS[model_idx].labels;
 const model_uri = MODELS[model_idx].model;
 
-const showRetryDetectionToast = (retries: number) => {
-	let retries_txt = "";
-	if (retries < 0 || retries > 2) retries_txt = "invalid retry";
-	else retries_txt = ["1st try", "2nd try", "3rd try"][retries];
+type RequestPermissionProps = {
+	cameraPermission: any;
+	requestCameraPermission: any;
+};
 
-	Toast.show(`Retry running detection ... ${retries_txt}`, {
+export const CameraPermissionsPage = ({
+	cameraPermission = null,
+	requestCameraPermission = null,
+}: RequestPermissionProps) => {
+	requestCameraPermission();
+
+	if (!cameraPermission.granted && !cameraPermission?.canAskAgain)
+		showToastWithMsg(
+			"The App can't have access to your camera, but you can give access manually."
+		);
+	return cameraPermission.granted;
+};
+
+const showToastWithMsg = (msg: string) => {
+	Toast.show(msg, {
 		visible: true,
 		position: Toast.positions.BOTTOM,
 		shadow: true,
@@ -63,61 +66,23 @@ const showRetryDetectionToast = (retries: number) => {
 	});
 };
 
+const showRetryDetectionToast = (retries: number) => {
+	let retries_txt = "";
+	if (retries < 0 || retries > 2) retries_txt = "invalid retry";
+	else retries_txt = ["1st try", "2nd try", "3rd try"][retries];
+	showToastWithMsg(`Retry running detection ... ${retries_txt}`);
+};
+
 export default function HomeScreen() {
 	const [predictionLabel, setPredictionLabel] = useState("");
 	const model = useTensorflowModel(model_uri);
-	const actual_model = model.state === "loaded" ? model.model : undefined;
+	const actual_model = model?.state === "loaded" ? model?.model : undefined;
 
 	const [labels_map, setLabels_map] = useState<string[] | null>(null);
 	if (!labels_map)
 		fetch_labels(labels_uri)
 			.then((data: string) => setLabels_map(data.split("\n")))
 			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
-
-	const isFocused = useIsFocused();
-	const appState = useAppState();
-	const [useCamera, setUseCamera] = useState(false);
-	const cameraOpened = useCamera && isFocused && appState === "active";
-
-	const { hasPermission, requestPermission } = useCameraPermission();
-	const [showPermissionsRequestPage, setShowPermissionsRequestPage] =
-		useState(false);
-
-	const device = useCameraDevice("back");
-
-	const toggleCamera = () => {
-		if (useCamera) return setUseCamera(false);
-
-		if (!hasPermission) setShowPermissionsRequestPage(true);
-
-		if (device == null) return <NoCameraDeviceError />;
-
-		setUseCamera(true);
-	};
-
-	// TODO: refactor this block (maybe with more meaningful variable names)
-	const [updatedImageUri, setUpdatedImageUri] = useState<any>(null);
-	const openImagePicker = (options: ImagePicker.ImageLibraryOptions) => {
-		ImagePicker.launchImageLibrary(options, setUpdatedImageUri);
-	};
-	const [prevImageUri, setPrevImageUri] = useState<any>(null);
-	const [imageUri, setImageUri] = useState<any>(null);
-	const [imageContent, setImageContent] = useState<any>(null);
-	const [imgInput, setImgInput] = useState<any>(null);
-	const [enableDetection, setEnableDetection] = useState(false);
-
-	const [imageSavedToastShow, setImageSavedToastShow] = useState(false);
-	const imageSavedToast = (
-		<Toast
-			visible={imageSavedToastShow}
-			position={Toast.positions.BOTTOM}
-			shadow={true}
-			animation={true}
-			hideOnPress={true}
-		>
-			Image saved to gallery!
-		</Toast>
-	);
 
 	const [detectionsToastShow, setDetectionsToastShow] = useState(false);
 	let detectionsToast = (
@@ -132,34 +97,73 @@ export default function HomeScreen() {
 		</Toast>
 	);
 
+	const isFocused = useIsFocused();
+	const appState = useAppState();
+	const [useCamera, setUseCamera] = useState(false);
+	const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+	const [camera, setCamera] = useState<CameraView | null>(null);
+	const [cameraReady, setCameraReady] = useState(false);
+	const [facing, setFacing] = useState<CameraType>("back");
+	const cameraOpened =
+		useCamera &&
+		cameraPermission?.granted &&
+		isFocused &&
+		appState === "active";
+
+	useEffect(() => {
+		toggleCamera(cameraPermission?.granted);
+	}, [cameraPermission]);
+
+	const toggleCamera = (useCamera: boolean = false) => {
+		if (!useCamera) return setUseCamera(false);
+
+		if (!cameraPermission) {
+			showToastWithMsg("Camera is still loading, please try again");
+			return;
+		}
+
+		let granted = cameraPermission.granted;
+		if (!granted)
+			granted = CameraPermissionsPage({
+				cameraPermission,
+				requestCameraPermission,
+			});
+		setUseCamera(granted);
+	};
+
+	const [updatedImageUri, setUpdatedImageUri] = useState<any>(null);
+	const openImagePicker = () =>
+		ImagePicker.launchImageLibraryAsync({ quality: 0.6, legacy: true }).then(
+			setUpdatedImageUri
+		);
+	const [prevImageUri, setPrevImageUri] = useState<any>(null);
+	const [imageUri, setImageUri] = useState<any>(null);
+	const [imageContent, setImageContent] = useState<any>(null);
+	const [imgInput, setImgInput] = useState<any>(null);
+	const [enableDetection, setEnableDetection] = useState(false);
+
 	useEffect(() => {
 		let skip = false;
 		let newImageUri = null;
-		// source is image picker
 		if (updatedImageUri?.assets)
+			// source is image picker
 			newImageUri = { localUri: true, uri: updatedImageUri?.assets[0].uri };
-		// source is camera
 		else if (updatedImageUri?.path)
-			newImageUri = { camUri: true, uri: `file://${updatedImageUri.path}` };
-		// use latest uploaded image after discarding cam capture
-		else if (updatedImageUri?.uri && !updatedImageUri?.camUri)
-			newImageUri = (() => {
-				const imgUri = { localUri: true, uri: updatedImageUri.uri };
-				setImageUri(imgUri);
-				return imgUri;
-			})();
-		// if all sources fail, check if current image is a valid then leave it as is
-		else if (imageUri?.uri && !imageUri?.camUri)
-			newImageUri = (() => {
-				skip = true;
-				return imageUri;
-			})();
-		// otherwise, load default image
-		else
-			newImageUri = (() => {
-				setImgInput(null);
-				return require("@/assets/images/robot-outline.512.png");
-			})();
+			// source is camera
+			newImageUri = { camUri: true, uri: updatedImageUri.path };
+		else if (updatedImageUri?.uri && !updatedImageUri?.camUri) {
+			// use latest uploaded image after discarding cam capture
+			newImageUri = { localUri: true, uri: updatedImageUri.uri };
+			setImageUri(newImageUri);
+		} else if (imageUri?.uri && !imageUri?.camUri) {
+			// if all sources fail, check if current image is a valid then leave it as is
+			newImageUri = imageUri;
+			skip = true;
+		} else {
+			// otherwise, load default image
+			newImageUri = require("@/assets/images/robot-outline.512.png");
+			setImgInput(null);
+		}
 
 		if (skip) {
 			console.log(`[MyInfoLog-updatePreview] there's no new image to be set`);
@@ -180,7 +184,6 @@ export default function HomeScreen() {
 
 		setDetectionsToastShow(false);
 		setPredictionLabel("");
-		setTimeout(setImageSavedToastShow, 500, false);
 		if (!imageUri?.camUri) setPrevImageUri(imageUri);
 		setImageUri(newImageUri);
 	}, [updatedImageUri]);
@@ -229,13 +232,18 @@ export default function HomeScreen() {
 		setEnableDetection(labels_map && actual_model && imgInput);
 	}, [actual_model, labels_map, imgInput]);
 
-	const camera = useRef<Camera>(null);
-	const previewCameraCapture = () => {
-		camera.current
-			?.takeSnapshot()
+	const previewCameraCapture = async () => {
+		camera
+			?.takePictureAsync({
+				scale: 1,
+				quality: 0.6,
+				skipProcessing: true,
+			})
 			.then((img) => {
-				setUpdatedImageUri(img);
-				toggleCamera();
+				const camShot = { ...img, path: img?.uri };
+				delete camShot?.uri;
+				setUpdatedImageUri(camShot);
+				setUseCamera(false);
 				return img;
 			})
 			.catch((e) => {
@@ -243,32 +251,47 @@ export default function HomeScreen() {
 			});
 	};
 
+	const captureCameraBtn = (
+		<Pressable
+			style={[styles.camCaptureImageBtn]}
+			onPress={previewCameraCapture}
+		>
+			<Text>
+				<Ionicons size={30} name="camera-outline" />
+			</Text>
+			<Text
+				style={{
+					fontSize: 25,
+					color: "#000",
+					letterSpacing: 2,
+					marginLeft: 5,
+				}}
+			>
+				Capture
+			</Text>
+		</Pressable>
+	);
+
 	let cameraContent = <View></View>;
 	if (cameraOpened)
 		cameraContent = (
-			<CameraLiveFeed
-				cameraRef={camera}
-				width={CAMERA_WIDTH}
-				height={CAMERA_HEIGHT}
-			/>
+			<CameraView
+				style={{ flex: 1 }}
+				facing={facing}
+				ref={setCamera}
+				onCameraReady={() => setCameraReady(true)}
+				onMountError={(e) =>
+					console.log(`[MyErrLog-camerMount] ${JSON.stringify(e)}\n${e}`)
+				}
+				// capture a picture with good resolution then downsample to model input size 312x312
+				pictureSize="720x720"
+			>
+				{cameraReady ? captureCameraBtn : <View></View>}
+			</CameraView>
 		);
 
-	const captureCameraBtn = (
-		<Pressable
-			style={styles.imageButtons}
-			onPress={() => {
-				setShowPermissionsRequestPage(false);
-				previewCameraCapture();
-			}}
-		>
-			<ThemedText style={styles.imageButtonsText}>Capture</ThemedText>
-		</Pressable>
-	);
 	const uploadImageBtn = (
-		<Pressable
-			style={styles.imageButtons}
-			onPress={() => openImagePicker(uploadImageOptions)}
-		>
+		<Pressable style={styles.imageButtons} onPress={openImagePicker}>
 			<ThemedText style={styles.imageButtonsText}>Upload Image</ThemedText>
 		</Pressable>
 	);
@@ -276,14 +299,15 @@ export default function HomeScreen() {
 		<Pressable
 			style={styles.imageButtons}
 			onPress={() => {
-				toggleCamera();
+				toggleCamera(!useCamera);
+				if (cameraOpened) return;
 				let imgUri = imageUri;
 				if (imgUri?.camUri) delete imgUri.camUri;
 				setUpdatedImageUri({ ...imgUri });
 			}}
 		>
 			<ThemedText style={styles.imageButtonsText}>
-				{cameraOpened ? "Close" : "Open"} Camera
+				{cameraOpened && cameraReady ? "Close" : "Open"} Camera
 			</ThemedText>
 		</Pressable>
 	);
@@ -294,7 +318,7 @@ export default function HomeScreen() {
 			onPress={async () => {
 				MediaLibrary.createAssetAsync(imageUri?.uri)
 					.then((data) => {
-						setImageSavedToastShow(true);
+						showToastWithMsg("Image saved to gallery!");
 						setTimeout(setUpdatedImageUri, 1, data);
 					})
 					.catch((e) => {
@@ -329,7 +353,7 @@ export default function HomeScreen() {
 			<Pressable
 				style={styles.imageButtons}
 				onPress={runDetection}
-				disabled={!enableDetection}
+				disabled={!enableDetection || cameraOpened}
 			>
 				<ThemedText style={styles.imageButtonsText}>Check Crop</ThemedText>
 			</Pressable>
@@ -370,31 +394,24 @@ export default function HomeScreen() {
 		<View style={styles.pageContainer}>
 			<View style={{ alignItems: "center" }}>
 				<ThemedText style={{ letterSpacing: 2 }} type="title">
-					Welcome&thinsp;!
+					Welcome !
 				</ThemedText>
 				<View style={styles.imageContainer}>
 					{cameraOpened ? cameraContent : imageContent}
 				</View>
 
-				{showPermissionsRequestPage && !hasPermission ? (
-					<CameraPermissionsPage requestPermissionFn={requestPermission} />
-				) : (
-					<View></View>
-				)}
-
-				{cameraOpened && hasPermission ? (
-					captureCameraBtn
+				{cameraOpened && cameraReady ? (
+					<View style={styles.imageButtonsContainer}>{toggleCameraBtn}</View>
 				) : (
 					<View style={styles.imageButtonsContainer}>
 						{imageUri?.camUri ? discardCaptureBtn : uploadImageBtn}
 						{imageUri?.camUri ? saveCaptureBtn : toggleCameraBtn}
 					</View>
 				)}
-				{imageSavedToast}
 			</View>
 			{detectionsToast}
 			{detectionOutputs}
-			{enableDetection ? detectionBtn : <View></View>}
+			{enableDetection && !cameraOpened ? detectionBtn : <View></View>}
 		</View>
 	);
 }
@@ -475,5 +492,15 @@ const styles = StyleSheet.create({
 		letterSpacing: 2,
 		fontSize: 20,
 		fontWeight: "700",
+	},
+	camCaptureImageBtn: {
+		opacity: 0.6,
+		backgroundColor: "#7be",
+		width: "100%",
+		height: 50,
+		marginTop: "auto",
+		justifyContent: "center",
+		alignItems: "center",
+		flexDirection: "row",
 	},
 });
