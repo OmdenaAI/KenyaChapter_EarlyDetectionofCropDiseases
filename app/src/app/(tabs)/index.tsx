@@ -4,11 +4,11 @@ import {
 	Image,
 	StyleSheet,
 	Pressable,
-	FlatList,
-	ScrollView,
 	Text,
+	Linking,
 } from "react-native";
 import Toast from "react-native-root-toast";
+import Modal from "react-native-modal";
 
 import { useAppState } from "@react-native-community/hooks";
 import { useIsFocused } from "@react-navigation/core";
@@ -16,6 +16,7 @@ import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
+import { Ionicons } from "@expo/vector-icons";
 
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 import ParallaxThemedView from "@/components/ParallaxThemedView";
@@ -27,8 +28,8 @@ import {
 	fetch_labels,
 	get_img_model_input,
 } from "@/components/Model";
-import { Ionicons } from "@expo/vector-icons";
-import { center } from "@shopify/react-native-skia";
+import ThemedView from "@/components/ThemedView";
+import { useThemeColor } from "@/hooks/useThemeColor";
 
 const CAMERA_WIDTH = 312;
 const CAMERA_HEIGHT = 312;
@@ -36,24 +37,6 @@ const CAMERA_HEIGHT = 312;
 const model_idx = 1;
 const labels_uri = MODELS[model_idx].labels;
 const model_uri = MODELS[model_idx].model;
-
-type RequestPermissionProps = {
-	cameraPermission: any;
-	requestCameraPermission: any;
-};
-
-export const CameraPermissionsPage = ({
-	cameraPermission = null,
-	requestCameraPermission = null,
-}: RequestPermissionProps) => {
-	requestCameraPermission();
-
-	if (!cameraPermission.granted && !cameraPermission?.canAskAgain)
-		showToastWithMsg(
-			"The App can't have access to your camera, but you can give access manually."
-		);
-	return cameraPermission.granted;
-};
 
 const showToastWithMsg = (msg: string) => {
 	Toast.show(msg, {
@@ -101,6 +84,8 @@ export default function HomeScreen() {
 	const appState = useAppState();
 	const [useCamera, setUseCamera] = useState(false);
 	const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+	const [showAppSettingsModal, setShowAppSettingsModal] =
+		useState<boolean>(false);
 	const [camera, setCamera] = useState<CameraView | null>(null);
 	const [cameraReady, setCameraReady] = useState(false);
 	const [facing, setFacing] = useState<CameraType>("back");
@@ -111,25 +96,32 @@ export default function HomeScreen() {
 		appState === "active";
 
 	useEffect(() => {
-		toggleCamera(cameraPermission?.granted);
-	}, [cameraPermission]);
+		if (appState !== "active") return;
+		setShowAppSettingsModal(false);
+	}, [appState]);
 
-	const toggleCamera = (useCamera: boolean = false) => {
-		if (!useCamera) return setUseCamera(false);
-
+	const getCameraPermissions = () => {
 		if (!cameraPermission) {
 			showToastWithMsg("Camera is still loading, please try again");
 			return;
 		}
 
-		let granted = cameraPermission.granted;
-		if (!granted)
-			granted = CameraPermissionsPage({
-				cameraPermission,
-				requestCameraPermission,
-			});
-		setUseCamera(granted);
+		requestCameraPermission();
+
+		if (!cameraPermission.granted && !cameraPermission.canAskAgain)
+			setShowAppSettingsModal(true);
+		return cameraPermission.granted;
 	};
+
+	const toggleCamera = (useCamera: boolean = false) => {
+		setUseCamera(useCamera);
+		if (useCamera && !cameraPermission?.granted) getCameraPermissions();
+	};
+
+	useEffect(() => {
+		toggleCamera(cameraOpened);
+		setShowAppSettingsModal(useCamera && !cameraPermission?.granted);
+	}, [cameraPermission]);
 
 	const [updatedImageUri, setUpdatedImageUri] = useState<any>(null);
 	const openImagePicker = () =>
@@ -290,6 +282,43 @@ export default function HomeScreen() {
 			</CameraView>
 		);
 
+	const openAppSettingsScreen = (
+		<Modal
+			isVisible={showAppSettingsModal}
+			style={{ width: 350, alignSelf: "center" }}
+			onBackdropPress={() => setShowAppSettingsModal(false)}
+		>
+			<ThemedView style={[styles.centeredView, { zIndex: 9 }]}>
+				<ThemedView
+					style={[styles.modalView, { shadowColor: useThemeColor({}, "tint") }]}
+				>
+					<ThemedText
+						style={[styles.modalText, { fontSize: 17, fontWeight: "bold" }]}
+					>
+						Camera Permissions
+					</ThemedText>
+					<ThemedText style={styles.modalText}>
+						The App can't have access to your camera.
+					</ThemedText>
+					<ThemedText style={styles.modalText}>
+						You can give access to camera from app settings, click "I accept" to
+						go to the app settings page.
+					</ThemedText>
+					<Pressable onPress={Linking.openSettings}>
+						<ThemedText
+							style={[
+								styles.textStyle,
+								{ backgroundColor: useThemeColor({}, "btnBackground") },
+							]}
+						>
+							I accept
+						</ThemedText>
+					</Pressable>
+				</ThemedView>
+			</ThemedView>
+		</Modal>
+	);
+
 	const uploadImageBtn = (
 		<Pressable style={styles.imageButtons} onPress={openImagePicker}>
 			<ThemedText style={styles.imageButtonsText}>Upload Image</ThemedText>
@@ -367,24 +396,17 @@ export default function HomeScreen() {
 			<ParallaxScrollView childrenStyle={styles.innerContent}>
 				<ThemedText>
 					Type:&emsp;
-					<ThemedText style={styles.detectionLabelText}>
+					<ThemedText
+						style={[
+							styles.detectionLabelText,
+							{ backgroundColor: useThemeColor({}, "background") },
+						]}
+					>
 						{predictionLabel.toUpperCase()}
 					</ThemedText>
 				</ThemedText>
 				<Collapsible title="Crop disease prediction details" defaultOpen={true}>
 					<ThemedText>Here goes a list of details if there're any.</ThemedText>
-					<ThemedText>This list contains coco dataset classes:</ThemedText>
-					{/* TODO: search for another way to solve nested identical orientation scrollviews  */}
-					<ScrollView horizontal={true} showsHorizontalScrollIndicator={false}>
-						<FlatList
-							renderItem={({ item, index }) => (
-								<ThemedText>
-									{index} - {item}
-								</ThemedText>
-							)}
-							data={labels_map}
-						></FlatList>
-					</ScrollView>
 				</Collapsible>
 			</ParallaxScrollView>
 		</ParallaxThemedView>
@@ -412,6 +434,7 @@ export default function HomeScreen() {
 			{detectionsToast}
 			{detectionOutputs}
 			{enableDetection && !cameraOpened ? detectionBtn : <View></View>}
+			{openAppSettingsScreen}
 		</View>
 	);
 }
@@ -492,6 +515,8 @@ const styles = StyleSheet.create({
 		letterSpacing: 2,
 		fontSize: 20,
 		fontWeight: "700",
+		height: 50,
+		minWidth: 30,
 	},
 	camCaptureImageBtn: {
 		opacity: 0.6,
@@ -502,5 +527,28 @@ const styles = StyleSheet.create({
 		justifyContent: "center",
 		alignItems: "center",
 		flexDirection: "row",
+	},
+	centeredView: {
+		height: 0,
+		justifyContent: "center",
+		alignItems: "center",
+	},
+	modalView: {
+		padding: 20,
+		height: 265,
+		borderRadius: 20,
+		alignItems: "center",
+		elevation: 5,
+	},
+	modalText: {
+		marginBottom: 15,
+		textAlign: "center",
+	},
+	textStyle: {
+		fontWeight: "bold",
+		textAlign: "center",
+		paddingVertical: 5,
+		paddingHorizontal: 10,
+		borderRadius: 5,
 	},
 });
