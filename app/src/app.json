@@ -33,12 +33,6 @@
     "plugins": [
       "expo-router",
       [
-        "react-native-vision-camera",
-        {
-          "cameraPermissionText": "Allow Crop Diseases Detection App to access your Camera."
-        }
-      ],
-      [
         "expo-media-library",
         {
           "photosPermission": "Allow Crop Diseases Detection App to access your photos.",
@@ -49,7 +43,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app accesses your photos to let you share them with your friends."
+          "photosPermission": "Allow Crop Diseases Detection App to access your photos."
         }
       ],
       [

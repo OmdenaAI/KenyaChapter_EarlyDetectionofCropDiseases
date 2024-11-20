@@ -1,7 +1,7 @@
 import { Tensor, TensorflowModel } from "react-native-fast-tflite";
 import { Asset } from "expo-asset";
 import { readAsStringAsync } from "expo-file-system";
-import { Skia, useImage } from "@shopify/react-native-skia";
+import { Skia } from "@shopify/react-native-skia";
 
 export type ModelDetection = {
 	box: number[];
