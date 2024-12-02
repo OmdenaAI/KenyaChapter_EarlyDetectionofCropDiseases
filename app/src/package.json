@@ -20,7 +20,7 @@
     "@react-native-community/hooks": "^3.0.0",
     "@react-navigation/native": "^6.0.2",
     "@shopify/react-native-skia": "^1.5.3",
-    "expo": "~51.0.28",
+    "expo": "~52.0.11",
     "expo-asset": "~10.0.10",
     "expo-camera": "~15.0.16",
     "expo-constants": "~16.0.2",
