@@ -1,0 +1,6 @@
+common_rust
+gray_leaf_spot
+healthy
+maize_lethal_necrosis
+maize_streak_virus
+northern_leaf_spot
