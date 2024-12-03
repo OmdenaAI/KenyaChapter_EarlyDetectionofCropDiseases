@@ -13,7 +13,7 @@ import Modal from "react-native-modal";
 import { useAppState } from "@react-native-community/hooks";
 import { useIsFocused } from "@react-navigation/core";
 import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
-import { useTensorflowModel } from "react-native-fast-tflite";
+import { TensorflowModel, useTensorflowModel } from "react-native-fast-tflite";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,20 +23,12 @@ import ParallaxThemedView from "@/components/ParallaxThemedView";
 import ThemedText from "@/components/ThemedText";
 import Collapsible from "@/components/Collapsible";
 import MODELS from "@/constants/Models";
-import {
-	detectionModelPostProcess,
-	fetch_labels,
-	get_img_model_input,
-} from "@/components/Model";
+import { argMax, fetch_labels, get_img_model_input } from "@/components/Model";
 import ThemedView from "@/components/ThemedView";
 import { useThemeColor } from "@/hooks/useThemeColor";
 
-const CAMERA_WIDTH = 312;
-const CAMERA_HEIGHT = 312;
-
-const model_idx = 1;
-const labels_uri = MODELS[model_idx].labels;
-const model_uri = MODELS[model_idx].model;
+const CAMERA_WIDTH = 320;
+const CAMERA_HEIGHT = 320;
 
 const showToastWithMsg = (msg: string) => {
 	Toast.show(msg, {
@@ -49,6 +41,12 @@ const showToastWithMsg = (msg: string) => {
 	});
 };
 
+// see here: https://stackoverflow.com/a/4068586/12896502
+const to_pascal_case = (str: string) =>
+	str.replace(/(\w)(\w*)/g, function (g0, g1, g2) {
+		return g1.toUpperCase() + g2.toLowerCase();
+	});
+
 const showRetryDetectionToast = (retries: number) => {
 	let retries_txt = "";
 	if (retries < 0 || retries > 2) retries_txt = "invalid retry";
@@ -57,15 +55,62 @@ const showRetryDetectionToast = (retries: number) => {
 };
 
 export default function HomeScreen() {
-	const [predictionLabel, setPredictionLabel] = useState("");
-	const model = useTensorflowModel(model_uri);
-	const actual_model = model?.state === "loaded" ? model?.model : undefined;
+	const [predictionClassLabel, setPredictionClassLabel] = useState("");
+	const [predictionSubLabel, setPredictionSubLabel] = useState("");
 
-	const [labels_map, setLabels_map] = useState<string[] | null>(null);
-	if (!labels_map)
-		fetch_labels(labels_uri)
-			.then((data: string) => setLabels_map(data.split("\n")))
+	// TODO: refactor these four duplicate blocks into a hook to be modular with any TensorflowModel
+
+	const all_model = useTensorflowModel(MODELS.all.model);
+	const all_actual_model =
+		all_model?.state === "loaded" ? all_model?.model : undefined;
+	const [all_labels_map, setAll_labels_map] = useState<string[] | undefined>(
+		undefined
+	);
+	if (!all_labels_map)
+		fetch_labels(MODELS.all.labels)
+			.then((data: string) => setAll_labels_map(data.split("\n")))
 			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
+
+	const beans_model = useTensorflowModel(MODELS.beans.model);
+	const beans_actual_model =
+		beans_model?.state === "loaded" ? beans_model?.model : undefined;
+	const [beans_labels_map, setBeans_labels_map] = useState<
+		string[] | undefined
+	>(undefined);
+	if (!beans_labels_map)
+		fetch_labels(MODELS.beans.labels)
+			.then((data: string) => setBeans_labels_map(data.split("\n")))
+			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
+
+	const maize_model = useTensorflowModel(MODELS.maize.model);
+	const maize_actual_model =
+		maize_model?.state === "loaded" ? maize_model?.model : undefined;
+	const [maize_labels_map, setMaize_labels_map] = useState<
+		string[] | undefined
+	>(undefined);
+	if (!maize_labels_map)
+		fetch_labels(MODELS.maize.labels)
+			.then((data: string) => setMaize_labels_map(data.split("\n")))
+			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
+
+	const tomato_model = useTensorflowModel(MODELS.tomato.model);
+	const tomato_actual_model =
+		tomato_model?.state === "loaded" ? tomato_model?.model : undefined;
+	const [tomato_labels_map, setTomato_labels_map] = useState<
+		string[] | undefined
+	>(undefined);
+	if (!tomato_labels_map)
+		fetch_labels(MODELS.tomato.labels)
+			.then((data: string) => setTomato_labels_map(data.split("\n")))
+			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
+
+	const models_router: {
+		[k: string]: { model?: TensorflowModel; labels_map?: string[] };
+	} = {
+		beans: { model: beans_actual_model, labels_map: beans_labels_map },
+		maize: { model: maize_actual_model, labels_map: maize_labels_map },
+		tomato: { model: tomato_actual_model, labels_map: tomato_labels_map },
+	};
 
 	const [detectionsToastShow, setDetectionsToastShow] = useState(false);
 	let detectionsToast = (
@@ -125,7 +170,7 @@ export default function HomeScreen() {
 
 	const [updatedImageUri, setUpdatedImageUri] = useState<any>(null);
 	const openImagePicker = () =>
-		ImagePicker.launchImageLibraryAsync({ quality: 0.6, legacy: true }).then(
+		ImagePicker.launchImageLibraryAsync({ quality: 1, legacy: true }).then(
 			setUpdatedImageUri
 		);
 	const [prevImageUri, setPrevImageUri] = useState<any>(null);
@@ -162,9 +207,18 @@ export default function HomeScreen() {
 			return;
 		}
 
+		const img_size = { width: CAMERA_WIDTH, height: CAMERA_HEIGHT };
+		const float_input_model =
+			all_actual_model?.inputs[0].dataType === "float32";
 		if (newImageUri?.uri)
-			get_img_model_input(newImageUri.uri)
-				.then((img) => setImgInput(img))
+			get_img_model_input(newImageUri.uri, img_size, float_input_model)
+				.then((img) => {
+					if (!img)
+						throw new Error(
+							"[MyErrLog-modelInput] There's no image input for the model"
+						);
+					setImgInput(img);
+				})
 				.catch((e) => console.log(`[MyErrLog-modelInput] ${e}`));
 
 		setImageContent(
@@ -175,54 +229,68 @@ export default function HomeScreen() {
 		);
 
 		setDetectionsToastShow(false);
-		setPredictionLabel("");
+		setPredictionClassLabel("");
+		setPredictionSubLabel("");
 		if (!imageUri?.camUri) setPrevImageUri(imageUri);
 		setImageUri(newImageUri);
 	}, [updatedImageUri]);
 
 	const runDetection = () => {
-		const detect = () => {
-			if (!labels_map || !actual_model || !imgInput) return;
+		const detect = (model: TensorflowModel, labels_map: string[]) => {
+			if (!labels_map || !model || !imgInput) return;
 
-			const model_results = actual_model?.runSync([imgInput]);
-			if (!model_results) {
-				console.log("[MyErrLog-inference] No inference results");
-				return;
-			}
+			const model_results = all_actual_model?.runSync([imgInput]);
+			if (!model_results)
+				return console.log("[MyErrLog-inference] No inference results");
 
-			const inference_results = detectionModelPostProcess(model_results);
-			if (!inference_results.length) {
-				console.log("[MyErrLog-detections] There're no detections");
-				return;
-			}
-			return labels_map[inference_results[0].classIdx].trim();
+			const classIdx = argMax(model_results[0] as Float32Array);
+			return labels_map[classIdx].trim();
 		};
 
 		let retries = 0;
-		const tryDetection = () => {
+		const tryDetection = (model: TensorflowModel, labels_map: string[]) => {
 			++retries;
-			let detectionResult = detect();
+			let detectionResult = detect(model, labels_map);
 
-			if (!detectionResult && retries < 3) {
-				console.log(
-					`[MyWarnLog-detection] Detection failed, Retry #${retries}`
-				);
-				showRetryDetectionToast(retries - 1);
-				setTimeout(tryDetection, 1000);
+			if (!detectionResult) {
+				if (retries < 3) {
+					console.log(
+						`[MyWarnLog-detection] Detection failed, Retry #${retries}`
+					);
+					showRetryDetectionToast(retries - 1);
+					setTimeout(tryDetection, 1000);
+				} else {
+					setPredictionClassLabel("Detection failed!");
+				}
 			} else {
 				setTimeout(setDetectionsToastShow, 300, false);
-				setPredictionLabel(detectionResult ?? "Detection failed!");
+				setTimeout(setDetectionsToastShow, 600, false);
+				if (detectionResult in models_router) {
+					setPredictionClassLabel(
+						to_pascal_case(detectionResult.toLowerCase())
+					);
+					setTimeout(
+						tryDetection,
+						1,
+						models_router[detectionResult].model,
+						models_router[detectionResult].labels_map
+					);
+				} else {
+					setPredictionSubLabel(
+						to_pascal_case(detectionResult.toLowerCase().replaceAll("_", " "))
+					);
+				}
 			}
 		};
 
 		setDetectionsToastShow(true);
 		// TODO: figure out how to move this function calling to another thread
-		setTimeout(tryDetection, 1);
+		setTimeout(tryDetection, 1, all_model, all_labels_map);
 	};
 
 	useEffect(() => {
-		setEnableDetection(labels_map && actual_model && imgInput);
-	}, [actual_model, labels_map, imgInput]);
+		setEnableDetection(all_labels_map && all_actual_model && imgInput);
+	}, [all_actual_model, all_labels_map, imgInput]);
 
 	const previewCameraCapture = async () => {
 		camera
@@ -394,17 +462,24 @@ export default function HomeScreen() {
 		<ParallaxThemedView childrenStyle={styles.content}>
 			<ThemedText type="title">Results</ThemedText>
 			<ParallaxScrollView childrenStyle={styles.innerContent}>
-				<ThemedText>
-					Type:&emsp;
+				<View style={{ alignSelf: "center" }}>
 					<ThemedText
 						style={[
 							styles.detectionLabelText,
 							{ backgroundColor: useThemeColor({}, "background") },
 						]}
 					>
-						{predictionLabel.toUpperCase()}
+						{predictionClassLabel !== "" ? "Crop:" : ""} {predictionClassLabel}
 					</ThemedText>
-				</ThemedText>
+					<ThemedText
+						style={[
+							styles.subLabelText,
+							{ backgroundColor: useThemeColor({}, "background") },
+						]}
+					>
+						{predictionSubLabel !== "" ? "Type:" : ""} {predictionSubLabel}
+					</ThemedText>
+				</View>
 				<Collapsible title="Crop disease prediction details" defaultOpen={true}>
 					<ThemedText>Here goes a list of details if there're any.</ThemedText>
 				</Collapsible>
@@ -412,12 +487,14 @@ export default function HomeScreen() {
 		</ParallaxThemedView>
 	);
 
+	const themedBackgroundStyle = {
+		backgroundColor: useThemeColor({}, "background"),
+	};
+
 	return (
-		<View style={styles.pageContainer}>
-			<View style={{ alignItems: "center" }}>
-				<ThemedText style={{ letterSpacing: 2 }} type="title">
-					Welcome !
-				</ThemedText>
+		<View style={[styles.pageContainer, themedBackgroundStyle]}>
+			<View style={{ alignItems: "center", justifyContent: "flex-start" }}>
+				<ThemedText style={{ letterSpacing: 2 }} type="title"></ThemedText>
 				<View style={styles.imageContainer}>
 					{cameraOpened ? cameraContent : imageContent}
 				</View>
@@ -463,11 +540,8 @@ const styles = StyleSheet.create({
 	innerContent: {
 		flex: 1,
 		paddingHorizontal: 10,
-		gap: 16,
-		overflow: "hidden",
 	},
 	pageContainer: {
-		marginTop: 70,
 		flexDirection: "column",
 		flex: 1,
 	},
@@ -513,10 +587,24 @@ const styles = StyleSheet.create({
 	},
 	detectionLabelText: {
 		letterSpacing: 2,
-		fontSize: 20,
+		fontSize: 25,
 		fontWeight: "700",
-		height: 50,
-		minWidth: 30,
+		paddingTop: 5,
+		paddingBottom: 10,
+		alignSelf: "center",
+		width: "100%",
+		gap: 5,
+	},
+	subLabelText: {
+		letterSpacing: 2,
+		fontSize: 25,
+		fontWeight: "700",
+		paddingTop: 10,
+		paddingBottom: 20,
+		alignSelf: "center",
+		justifyContent: "center",
+		width: "100%",
+		gap: 15,
 	},
 	camCaptureImageBtn: {
 		opacity: 0.6,
