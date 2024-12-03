@@ -1,12 +1,20 @@
-const MODELS = [
-  {
-    model: require("@/assets/models/mobilenet3.tflite"),
-    labels: require("@/assets/models/mobilenet_ImageNetLabels.txt"),
+const MODELS = {
+  'all': {
+    model: require("@/assets/models/all-f16.tflite"),
+    labels: require("@/assets/models/all-labelmap.txt"),
   },
-  {
-    model: require("@/assets/models/efficientdet.tflite"),
-    labels: require("@/assets/models/efficientdet-coco-labels-2014_2017.txt"),
+  'beans': {
+    model: require("@/assets/models/beans-f16.tflite"),
+    labels: require("@/assets/models/beans-labelmap.txt"),
   },
-];
+  'maize': {
+    model: require("@/assets/models/maize-f16.tflite"),
+    labels: require("@/assets/models/maize-labelmap.txt"),
+  },
+  'tomato': {
+    model: require("@/assets/models/tomato-f16.tflite"),
+    labels: require("@/assets/models/tomato-labelmap.txt"),
+  },
+};
 
 export default MODELS;
