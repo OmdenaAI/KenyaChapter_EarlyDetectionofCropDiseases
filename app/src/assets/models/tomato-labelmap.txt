@@ -1,11 +1,11 @@
-bacterial_spot
-black_mold
-early_blight
-gray_spot
-healthy
-late_blight
-leaf_mold
-mosaic_virus
-septoria_leaf_spot
-target_spot
-yellow_leaf_virus
+Bacterial Spot
+Black Mold
+Early Blight
+Gray spot
+Healthy
+Late Blight
+Leaf Mold
+Mosaic Virus
+Septoria leaf spot
+Target Spot
+Yellow_Leaf_Virus
