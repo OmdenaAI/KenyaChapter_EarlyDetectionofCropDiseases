@@ -36,52 +36,34 @@ def call_inference(img: str | Image.Image, interpreter):
     ]
 
 
-def get_efficientdet_tflite():
+def get_model_tflite(model_name):
     import tensorflow as tf
 
-    efficientdet_labelmap_path = f"{MODEL_ASSETS_PATH}/efficientdet-labelmap.txt"
-    efficientdet_labelmap = read_labelmap_file(efficientdet_labelmap_path)
+    labelmap_path = f"{MODEL_ASSETS_PATH}/{model_name}-labelmap.txt"
+    labelmap = read_labelmap_file(labelmap_path)
 
-    efficientdet_model_path = f"{MODEL_ASSETS_PATH}/efficientdet.tflite"
-    efficientdet_interpreter = tf.lite.Interpreter(efficientdet_model_path)
-    efficientdet_interpreter.allocate_tensors()
-    return efficientdet_interpreter, efficientdet_labelmap
-
-
-def test_efficientdet_tflite(
-    img: str | Image.Image, efficientdet_interpreter, efficientdet_labelmap
-):
-    out_box, out_class, out_score, *_ = call_inference(img, efficientdet_interpreter)
-    return out_box[0], efficientdet_labelmap[int(out_class[0])], out_score[0]
+    model_path = f"{MODEL_ASSETS_PATH}/{model_name}-f16.tflite"
+    model_interpreter = tf.lite.Interpreter(model_path)
+    model_interpreter.allocate_tensors()
+    return model_interpreter, labelmap
 
 
-def get_mobilenetv3_tflite():
-    import tensorflow as tf
-
-    mobilenetv3_labelmap_path = f"{MODEL_ASSETS_PATH}/mobilenetv3-labelmap.txt"
-    mobilenetv3_labelmap = read_labelmap_file(mobilenetv3_labelmap_path)
-
-    mobilenetv3_model_path = f"{MODEL_ASSETS_PATH}/mobilenetv3.tflite"
-    mobilenetv3_interpreter = tf.lite.Interpreter(mobilenetv3_model_path)
-    mobilenetv3_interpreter.allocate_tensors()
-    return mobilenetv3_interpreter, mobilenetv3_labelmap
-
-
-def test_mobilenetv3_tflite(
-    img: str | Image.Image, mobilenetv3_interpreter, mobilenetv3_labelmap
-):
-    outputs = call_inference(img, mobilenetv3_interpreter)
-    return mobilenetv3_labelmap[np.argmax(outputs[0])]
+def test_tflite(img: str | Image.Image, model_interpreter, labelmap):
+    outputs = call_inference(img, model_interpreter)
+    return labelmap[np.argmax(outputs[0])]
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     img_path, model = args.img_path, args.model
     match model:
-        case "mobilenetv3":
-            out = test_mobilenetv3_tflite(img_path, *get_mobilenetv3_tflite())
-            print(out)
-        case "efficientdet":
-            out = test_efficientdet_tflite(img_path, *get_efficientdet_tflite())
-            print(out)
+        case "auto":
+            crop_type = test_tflite(img_path, *get_model_tflite(model))
+            print(crop_type)
+            disease = test_tflite(img_path, *get_model_tflite(crop_type))
+            print(disease)
+
+        case "beans" | "cassava" | "maize" | "tomato":
+            disease = test_tflite(img_path, *get_model_tflite(model))
+            print(disease)
     print("completed")
