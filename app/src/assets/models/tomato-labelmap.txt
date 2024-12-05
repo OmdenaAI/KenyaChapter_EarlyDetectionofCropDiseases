@@ -1,4 +1,7 @@
+bacterial_spot
+black_mold
 early_blight
+gray_spot
 healthy
 late_blight
 leaf_mold

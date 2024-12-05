@@ -1,0 +1,5 @@
+cassava_bacterial_blight
+cassava_brown_streak
+cassava_green_mite
+cassava_mosaic_virus
+healthy

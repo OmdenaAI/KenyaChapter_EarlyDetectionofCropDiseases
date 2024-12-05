@@ -1,3 +1,4 @@
 beans
+cassava
 maize
 tomato
