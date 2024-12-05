@@ -6,17 +6,22 @@ import {
 	Pressable,
 	Text,
 	Linking,
+	useColorScheme,
 } from "react-native";
 import Toast from "react-native-root-toast";
 import Modal from "react-native-modal";
 
 import { useAppState } from "@react-native-community/hooks";
 import { useIsFocused } from "@react-navigation/core";
-import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 import { TensorflowModel, useTensorflowModel } from "react-native-fast-tflite";
+import { Stack } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
+import Feather from "@expo/vector-icons/Feather";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
-import { Ionicons } from "@expo/vector-icons";
+import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
 
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 import ParallaxThemedView from "@/components/ParallaxThemedView";
@@ -26,17 +31,19 @@ import MODELS from "@/constants/Models";
 import { argMax, fetch_labels, get_img_model_input } from "@/components/Model";
 import ThemedView from "@/components/ThemedView";
 import { useThemeColor } from "@/hooks/useThemeColor";
+import Colors from "@/constants/Colors";
 
 const CAMERA_WIDTH = 320;
 const CAMERA_HEIGHT = 320;
+type TFLite_model = { model?: TensorflowModel; labels_map?: string[] };
 
-const showToastWithMsg = (msg: string) => {
+const showToastWithMsg = (msg: string, delay: number = 500) => {
 	Toast.show(msg, {
 		visible: true,
 		position: Toast.positions.BOTTOM,
 		shadow: true,
 		animation: true,
-		delay: 500,
+		delay: delay,
 		hideOnPress: true,
 	});
 };
@@ -50,8 +57,8 @@ const to_pascal_case = (str: string) =>
 const showRetryDetectionToast = (retries: number) => {
 	let retries_txt = "";
 	if (retries < 0 || retries > 2) retries_txt = "invalid retry";
-	else retries_txt = ["1st try", "2nd try", "3rd try"][retries];
-	showToastWithMsg(`Retry running detection ... ${retries_txt}`);
+	else retries_txt = ["1st", "2nd", "3rd"][retries] + " try";
+	showToastWithMsg(`Retry running detection ... ${retries_txt}`, 500);
 };
 
 export default function HomeScreen() {
@@ -60,15 +67,15 @@ export default function HomeScreen() {
 
 	// TODO: refactor these four duplicate blocks into a hook to be modular with any TensorflowModel
 
-	const all_model = useTensorflowModel(MODELS.all.model);
-	const all_actual_model =
-		all_model?.state === "loaded" ? all_model?.model : undefined;
-	const [all_labels_map, setAll_labels_map] = useState<string[] | undefined>(
+	const auto_model = useTensorflowModel(MODELS.auto.model);
+	const auto_actual_model =
+		auto_model?.state === "loaded" ? auto_model?.model : undefined;
+	const [auto_labels_map, setAuto_labels_map] = useState<string[] | undefined>(
 		undefined
 	);
-	if (!all_labels_map)
-		fetch_labels(MODELS.all.labels)
-			.then((data: string) => setAll_labels_map(data.split("\n")))
+	if (!auto_labels_map)
+		fetch_labels(MODELS.auto.labels)
+			.then((data: string) => setAuto_labels_map(data.split("\n")))
 			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
 
 	const beans_model = useTensorflowModel(MODELS.beans.model);
@@ -80,6 +87,17 @@ export default function HomeScreen() {
 	if (!beans_labels_map)
 		fetch_labels(MODELS.beans.labels)
 			.then((data: string) => setBeans_labels_map(data.split("\n")))
+			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
+
+	const cassava_model = useTensorflowModel(MODELS.cassava.model);
+	const cassava_actual_model =
+		cassava_model?.state === "loaded" ? cassava_model?.model : undefined;
+	const [cassava_labels_map, setCassava_labels_map] = useState<
+		string[] | undefined
+	>(undefined);
+	if (!cassava_labels_map)
+		fetch_labels(MODELS.cassava.labels)
+			.then((data: string) => setCassava_labels_map(data.split("\n")))
 			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
 
 	const maize_model = useTensorflowModel(MODELS.maize.model);
@@ -105,12 +123,17 @@ export default function HomeScreen() {
 			.catch((e) => console.log("[MyErrLog-labelsMap] " + e));
 
 	const models_router: {
-		[k: string]: { model?: TensorflowModel; labels_map?: string[] };
+		[k: string]: TFLite_model;
 	} = {
+		auto: { model: auto_actual_model, labels_map: auto_labels_map },
 		beans: { model: beans_actual_model, labels_map: beans_labels_map },
+		cassava: { model: cassava_actual_model, labels_map: cassava_labels_map },
 		maize: { model: maize_actual_model, labels_map: maize_labels_map },
 		tomato: { model: tomato_actual_model, labels_map: tomato_labels_map },
 	};
+
+	const [showModalDetectionModels, setShowModalDetectionModels] =
+		useState<boolean>(false);
 
 	const [detectionsToastShow, setDetectionsToastShow] = useState(false);
 	let detectionsToast = (
@@ -147,7 +170,7 @@ export default function HomeScreen() {
 
 	const getCameraPermissions = () => {
 		if (!cameraPermission) {
-			showToastWithMsg("Camera is still loading, please try again");
+			showToastWithMsg("Camera is still loading, please try again", 500);
 			return;
 		}
 
@@ -178,6 +201,7 @@ export default function HomeScreen() {
 	const [imageContent, setImageContent] = useState<any>(null);
 	const [imgInput, setImgInput] = useState<any>(null);
 	const [enableDetection, setEnableDetection] = useState(false);
+	const current_style = useColorScheme() ?? "light";
 
 	useEffect(() => {
 		let skip = false;
@@ -193,12 +217,17 @@ export default function HomeScreen() {
 			newImageUri = { localUri: true, uri: updatedImageUri.uri };
 			setImageUri(newImageUri);
 		} else if (imageUri?.uri && !imageUri?.camUri) {
-			// if all sources fail, check if current image is a valid then leave it as is
 			newImageUri = imageUri;
+			// if all sources fail, check if current image is a valid then leave it as is
 			skip = true;
 		} else {
 			// otherwise, load default image
-			newImageUri = require("@/assets/images/robot-outline.512.png");
+			const default_img_uri_dark = "@/assets/images/robot.512-dark.png";
+			const default_img_uri = "@/assets/images/robot.512.png";
+			newImageUri =
+				current_style === "dark"
+					? require(default_img_uri_dark)
+					: require(default_img_uri);
 			setImgInput(null);
 		}
 
@@ -209,7 +238,7 @@ export default function HomeScreen() {
 
 		const img_size = { width: CAMERA_WIDTH, height: CAMERA_HEIGHT };
 		const float_input_model =
-			all_actual_model?.inputs[0].dataType === "float32";
+			auto_actual_model?.inputs[0].dataType === "float32";
 		if (newImageUri?.uri)
 			get_img_model_input(newImageUri.uri, img_size, float_input_model)
 				.then((img) => {
@@ -235,62 +264,49 @@ export default function HomeScreen() {
 		setImageUri(newImageUri);
 	}, [updatedImageUri]);
 
-	const runDetection = () => {
-		const detect = (model: TensorflowModel, labels_map: string[]) => {
-			if (!labels_map || !model || !imgInput) return;
+	const detect = (model_name: string) => {
+		const model: TFLite_model = models_router[model_name] ?? {};
+		if (!model.labels_map || !model.model || !imgInput) return;
 
-			const model_results = all_actual_model?.runSync([imgInput]);
-			if (!model_results)
-				return console.log("[MyErrLog-inference] No inference results");
+		const model_results = auto_actual_model?.runSync([imgInput]);
+		if (!model_results)
+			return console.log("[MyErrLog-inference] No inference results");
 
-			const classIdx = argMax(model_results[0] as Float32Array);
-			return labels_map[classIdx].trim();
-		};
+		const classIdx = argMax(model_results[0] as Float32Array);
+		return model.labels_map[classIdx].trim();
+	};
 
-		let retries = 0;
-		const tryDetection = (model: TensorflowModel, labels_map: string[]) => {
-			++retries;
-			let detectionResult = detect(model, labels_map);
+	const tryDetection = (model_name: string, retries: number = 1) => {
+		if (retries == 0) setDetectionsToastShow(true);
+		let detectionResult = detect(model_name);
 
-			if (!detectionResult) {
-				if (retries < 3) {
-					console.log(
-						`[MyWarnLog-detection] Detection failed, Retry #${retries}`
-					);
-					showRetryDetectionToast(retries - 1);
-					setTimeout(tryDetection, 1000);
-				} else {
-					setPredictionClassLabel("Detection failed!");
-				}
-			} else {
-				setTimeout(setDetectionsToastShow, 300, false);
-				setTimeout(setDetectionsToastShow, 600, false);
-				if (detectionResult in models_router) {
-					setPredictionClassLabel(
-						to_pascal_case(detectionResult.toLowerCase())
-					);
-					setTimeout(
-						tryDetection,
-						1,
-						models_router[detectionResult].model,
-						models_router[detectionResult].labels_map
-					);
-				} else {
-					setPredictionSubLabel(
-						to_pascal_case(detectionResult.toLowerCase().replaceAll("_", " "))
-					);
-				}
+		if (!detectionResult) {
+			if (retries > 3) {
+				if (model_name === "auto")
+					return setPredictionClassLabel("Crop Detection failed!");
+				return setPredictionSubLabel("Disease Detection failed!");
 			}
-		};
-
-		setDetectionsToastShow(true);
-		// TODO: figure out how to move this function calling to another thread
-		setTimeout(tryDetection, 1, all_model, all_labels_map);
+			console.log(`[MyWarnLog-detection] Detection failed, Retry #${retries}`);
+			showRetryDetectionToast(retries - 1);
+			setTimeout(tryDetection, 1000, model_name, retries + 1);
+		} else {
+			setTimeout(setDetectionsToastShow, 300, false);
+			setTimeout(setDetectionsToastShow, 1000, false);
+			setTimeout(setDetectionsToastShow, 3000, false);
+			if (detectionResult in models_router) {
+				setPredictionClassLabel(to_pascal_case(detectionResult.toLowerCase()));
+				setTimeout(tryDetection, 1, detectionResult);
+			} else {
+				setPredictionSubLabel(
+					to_pascal_case(detectionResult.toLowerCase().replaceAll("_", " "))
+				);
+			}
+		}
 	};
 
 	useEffect(() => {
-		setEnableDetection(all_labels_map && all_actual_model && imgInput);
-	}, [all_actual_model, all_labels_map, imgInput]);
+		setEnableDetection(auto_labels_map && auto_actual_model && imgInput);
+	}, [auto_actual_model, auto_labels_map, imgInput]);
 
 	const previewCameraCapture = async () => {
 		camera
@@ -332,6 +348,11 @@ export default function HomeScreen() {
 		</Pressable>
 	);
 
+	const themedTintClr = useThemeColor({}, "tint");
+	const themedBtnBackgroundClr = useThemeColor({}, "btnBackground");
+	const themedBackgroundClr = useThemeColor({}, "background");
+	const themedTextClr = useThemeColor({}, "text");
+
 	let cameraContent = <View></View>;
 	if (cameraOpened)
 		cameraContent = (
@@ -343,11 +364,9 @@ export default function HomeScreen() {
 				onMountError={(e) =>
 					console.log(`[MyErrLog-camerMount] ${JSON.stringify(e)}\n${e}`)
 				}
-				// capture a picture with good resolution then downsample to model input size 312x312
+				// capture a picture with good resolution then downsample to model input size 320x320
 				pictureSize="720x720"
-			>
-				{cameraReady ? captureCameraBtn : <View></View>}
-			</CameraView>
+			></CameraView>
 		);
 
 	const openAppSettingsScreen = (
@@ -376,7 +395,7 @@ export default function HomeScreen() {
 						<ThemedText
 							style={[
 								styles.textStyle,
-								{ backgroundColor: useThemeColor({}, "btnBackground") },
+								{ backgroundColor: themedBtnBackgroundClr },
 							]}
 						>
 							I accept
@@ -388,13 +407,23 @@ export default function HomeScreen() {
 	);
 
 	const uploadImageBtn = (
-		<Pressable style={styles.imageButtons} onPress={openImagePicker}>
+		<Pressable
+			style={[styles.imageButtons, { flexDirection: "row" }]}
+			onPress={openImagePicker}
+		>
+			<Text style={{ lineHeight: 30, marginRight: 5 }}>
+				<Feather name="upload" size={24} color="black" />
+			</Text>
 			<ThemedText style={styles.imageButtonsText}>Upload Image</ThemedText>
 		</Pressable>
 	);
 	const toggleCameraBtn = (
 		<Pressable
-			style={styles.imageButtons}
+			style={[
+				styles.imageButtons,
+				{ flexDirection: "row" },
+				cameraOpened && cameraReady ? { width: "55%" } : {},
+			]}
 			onPress={() => {
 				toggleCamera(!useCamera);
 				if (cameraOpened) return;
@@ -403,8 +432,11 @@ export default function HomeScreen() {
 				setUpdatedImageUri({ ...imgUri });
 			}}
 		>
+			<Text style={{ lineHeight: 30, marginRight: 5 }}>
+				<Ionicons size={24} name="camera-outline" />
+			</Text>
 			<ThemedText style={styles.imageButtonsText}>
-				{cameraOpened && cameraReady ? "Close" : "Open"} Camera
+				{cameraOpened && cameraReady ? "Close Camera" : "Open"} Camera
 			</ThemedText>
 		</Pressable>
 	);
@@ -415,7 +447,7 @@ export default function HomeScreen() {
 			onPress={async () => {
 				MediaLibrary.createAssetAsync(imageUri?.uri)
 					.then((data) => {
-						showToastWithMsg("Image saved to gallery!");
+						showToastWithMsg("Image saved to gallery!", 300);
 						setTimeout(setUpdatedImageUri, 1, data);
 					})
 					.catch((e) => {
@@ -441,20 +473,102 @@ export default function HomeScreen() {
 
 	const detectionBtn = (
 		<View
-			style={{
-				flexDirection: "row",
-				justifyContent: "center",
-				marginVertical: 20,
-			}}
+			style={{ width: "100%", flexDirection: "row", justifyContent: "center" }}
 		>
 			<Pressable
-				style={styles.imageButtons}
-				onPress={runDetection}
+				style={[
+					styles.imageButtons,
+					{ width: "100%", height: 55, flexDirection: "row" },
+				]}
+				onPress={() => setTimeout(tryDetection, 1, "auto")}
 				disabled={!enableDetection || cameraOpened}
 			>
-				<ThemedText style={styles.imageButtonsText}>Check Crop</ThemedText>
+				<Text style={{ lineHeight: 30, marginRight: 5 }}>
+					<FontAwesome6 name="magnifying-glass" size={24} color="black" />
+				</Text>
+				<ThemedText
+					style={[styles.imageButtonsText, { lineHeight: 30, fontSize: 26 }]}
+				>
+					Check Crop
+				</ThemedText>
 			</Pressable>
 		</View>
+	);
+
+	const changeDetectionModel = (model_name: string) => {
+		setPredictionClassLabel(to_pascal_case(model_name));
+		setPredictionSubLabel("");
+		setTimeout(tryDetection, 1, model_name);
+		setShowModalDetectionModels(false);
+	};
+
+	const choseModelBtnStyle = {
+		borderWidth: 2,
+		borderRadius: 10,
+		margin: 5,
+		width: 100,
+		selfAlign: "center",
+		borderColor: themedTextClr,
+	};
+
+	const chooseDifferentDetectionModel = (
+		<Modal
+			isVisible={showModalDetectionModels}
+			style={{ width: 350, height: 10, alignSelf: "center" }}
+			onBackdropPress={() => setShowModalDetectionModels(false)}
+		>
+			<ThemedView style={[styles.centeredView, { zIndex: 9 }]}>
+				<ThemedView
+					style={[
+						styles.modalView,
+						{ height: 180, shadowColor: themedTintClr },
+					]}
+				>
+					<ThemedText
+						style={[styles.modalText, { fontSize: 20, fontWeight: "bold" }]}
+					>
+						Choose detection model
+					</ThemedText>
+
+					<View style={{ flexDirection: "row" }}>
+						<Pressable
+							style={choseModelBtnStyle}
+							onPress={() => changeDetectionModel("beans")}
+						>
+							<ThemedText style={styles.textStyle}>Beans</ThemedText>
+						</Pressable>
+						<Pressable
+							style={choseModelBtnStyle}
+							onPress={() => changeDetectionModel("cassava")}
+						>
+							<ThemedText style={styles.textStyle}>Cassava</ThemedText>
+						</Pressable>
+					</View>
+					<View style={{ flexDirection: "row" }}>
+						<Pressable
+							style={choseModelBtnStyle}
+							onPress={() => changeDetectionModel("maize")}
+						>
+							<ThemedText style={styles.textStyle}>Maize</ThemedText>
+						</Pressable>
+						<Pressable
+							style={choseModelBtnStyle}
+							onPress={() => changeDetectionModel("tomato")}
+						>
+							<ThemedText style={styles.textStyle}>Tomato</ThemedText>
+						</Pressable>
+					</View>
+				</ThemedView>
+			</ThemedView>
+		</Modal>
+	);
+
+	const down_arrow = (
+		<FontAwesome
+			name="chevron-down"
+			size={26}
+			color={useThemeColor({}, "text")}
+		/>
 	);
 
 	const detectionOutputs = (
@@ -462,26 +576,50 @@ export default function HomeScreen() {
 		<ParallaxThemedView childrenStyle={styles.content}>
 			<ThemedText type="title">Results</ThemedText>
 			<ParallaxScrollView childrenStyle={styles.innerContent}>
-				<View style={{ alignSelf: "center" }}>
-					<ThemedText
-						style={[
-							styles.detectionLabelText,
-							{ backgroundColor: useThemeColor({}, "background") },
-						]}
+				<View>
+					<View
+						style={{
+							alignSelf: "center",
+							alignItems: "center",
+							justifyContent: "center",
+							width: "100%",
+							flexDirection: "row",
+						}}
 					>
-						{predictionClassLabel !== "" ? "Crop:" : ""} {predictionClassLabel}
-					</ThemedText>
+						<ThemedText style={styles.detectionLabelText}>
+							{predictionClassLabel !== "" ? "Crop: " : ""}
+						</ThemedText>
+						<Pressable
+							style={[
+								styles.cropDetectionLbl,
+								predictionClassLabel !== ""
+									? { borderColor: themedTextClr }
+									: { borderColor: "#0000" },
+							]}
+							onPress={() => setShowModalDetectionModels(true)}
+							disabled={!enableDetection || cameraOpened}
+						>
+							<ThemedText style={styles.detectionLabelText}>
+								{predictionClassLabel}&nbsp;{predictionClassLabel && down_arrow}
+							</ThemedText>
+						</Pressable>
+					</View>
 					<ThemedText
 						style={[
 							styles.subLabelText,
-							{ backgroundColor: useThemeColor({}, "background") },
+							{
+								backgroundColor: themedBackgroundClr,
+							},
 						]}
 					>
-						{predictionSubLabel !== "" ? "Type:" : ""} {predictionSubLabel}
+						{predictionSubLabel && "Type:"} {predictionSubLabel}
 					</ThemedText>
 				</View>
-				<Collapsible title="Crop disease prediction details" defaultOpen={true}>
-					<ThemedText>Here goes a list of details if there're any.</ThemedText>
+				<Collapsible
+					title="Crop disease prediction details"
+					defaultOpen={false}
+				>
+					<ThemedText>No details provided.</ThemedText>
 				</Collapsible>
 			</ParallaxScrollView>
 		</ParallaxThemedView>
@@ -493,14 +631,29 @@ export default function HomeScreen() {
 
 	return (
 		<View style={[styles.pageContainer, themedBackgroundStyle]}>
-			<View style={{ alignItems: "center", justifyContent: "flex-start" }}>
+			<Stack.Screen options={{ headerShown: false, title: "Home" }} />
+			<View
+				style={{
+					alignItems: "center",
+					marginTop: 30,
+					justifyContent: "flex-start",
+				}}
+			>
 				<ThemedText style={{ letterSpacing: 2 }} type="title"></ThemedText>
 				<View style={styles.imageContainer}>
+					{/* we don't wait for cameraReady since camera must be initiated first to enter ready state */}
 					{cameraOpened ? cameraContent : imageContent}
 				</View>
-
+			</View>
+			{detectionsToast}
+			{detectionOutputs}
+			<View style={{ alignSelf: "center", width: 300 }}>
+				{enableDetection && !cameraOpened ? detectionBtn : <View></View>}
 				{cameraOpened && cameraReady ? (
-					<View style={styles.imageButtonsContainer}>{toggleCameraBtn}</View>
+					<View>
+						{captureCameraBtn}
+						<View style={styles.imageButtonsContainer}>{toggleCameraBtn}</View>
+					</View>
 				) : (
 					<View style={styles.imageButtonsContainer}>
 						{imageUri?.camUri ? discardCaptureBtn : uploadImageBtn}
@@ -508,9 +661,7 @@ export default function HomeScreen() {
 					</View>
 				)}
 			</View>
-			{detectionsToast}
-			{detectionOutputs}
-			{enableDetection && !cameraOpened ? detectionBtn : <View></View>}
+			{chooseDifferentDetectionModel}
 			{openAppSettingsScreen}
 		</View>
 	);
@@ -569,52 +720,54 @@ const styles = StyleSheet.create({
 		borderRadius: 10,
 		paddingVertical: 5,
 		marginHorizontal: 5,
-		marginVertical: 10,
+		marginVertical: 5,
 		alignItems: "center",
 		justifyContent: "center",
 		backgroundColor: "#7be",
-		width: 130,
-		height: 40,
+		width: "55%",
+		height: 45,
 	},
 	imageButtonsText: {
 		fontWeight: "500",
 		fontSize: 17,
+		color: Colors.light.text,
 	},
 	imageButtonsContainer: {
 		flexDirection: "row",
 		alignItems: "center",
 		justifyContent: "center",
+		marginBottom: 20,
 	},
 	detectionLabelText: {
 		letterSpacing: 2,
 		fontSize: 25,
 		fontWeight: "700",
 		paddingTop: 5,
-		paddingBottom: 10,
 		alignSelf: "center",
-		width: "100%",
 		gap: 5,
 	},
 	subLabelText: {
 		letterSpacing: 2,
-		fontSize: 25,
+		fontSize: 20,
 		fontWeight: "700",
-		paddingTop: 10,
+		paddingTop: 15,
 		paddingBottom: 20,
 		alignSelf: "center",
 		justifyContent: "center",
-		width: "100%",
 		gap: 15,
+		alignItems: "center",
 	},
 	camCaptureImageBtn: {
 		opacity: 0.6,
 		backgroundColor: "#7be",
-		width: "100%",
-		height: 50,
+		width: "1000%",
+		height: 55,
 		marginTop: "auto",
+		marginVertical: 5,
 		justifyContent: "center",
 		alignItems: "center",
 		flexDirection: "row",
+		alignSelf: "center",
 	},
 	centeredView: {
 		height: 0,
@@ -638,5 +791,14 @@ const styles = StyleSheet.create({
 		paddingVertical: 5,
 		paddingHorizontal: 10,
 		borderRadius: 5,
+	},
+	cropDetectionLbl: {
+		paddingHorizontal: 10,
+		paddingTop: 5,
+		paddingBottom: 5,
+		borderWidth: 2,
+		borderRadius: 5,
+		height: 45,
+		alignSelf: "center",
 	},
 });
